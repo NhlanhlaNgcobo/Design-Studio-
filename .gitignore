@@ -1,0 +1,10 @@
+﻿# Scratch and OS noise
+Thumbs.db
+desktop.ini
+.DS_Store
+*.tmp
+~$*
+
+# Build tooling
+build/node_modules/
+build/.outbox/
