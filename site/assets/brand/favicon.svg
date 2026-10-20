@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Interim mark: the four process inks of the Eminence logo's droplets.
+       Replace with the vector redraw specified in ASSETS.md. -->
+  <rect width="32" height="32" rx="7" fill="#14161A"/>
+  <circle cx="11" cy="11" r="5.2" fill="#00A0E3"/>
+  <circle cx="21" cy="11" r="5.2" fill="#E5007E"/>
+  <circle cx="11" cy="21" r="5.2" fill="#FFE500"/>
+  <circle cx="21" cy="21" r="5.2" fill="#FFFFFF"/>
+</svg>

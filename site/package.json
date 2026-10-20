@@ -1,0 +1,7 @@
+{
+  "name": "eminence-printing-site",
+  "private": true,
+  "type": "module",
+  "description": "Static site + Design Studio + two Vercel functions. No runtime dependencies.",
+  "engines": { "node": ">=20" }
+}
