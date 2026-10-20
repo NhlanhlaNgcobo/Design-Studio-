@@ -1,0 +1,47 @@
+/* Eminence Printing — brand tokens.
+ *
+ * Built from their real logo (research/facebook/logo-original-fb-720.jpg):
+ * four process-ink droplets and a cyan-and-magenta "EP". So the system is
+ * process colour — cyan, magenta, yellow, key — on uncoated-paper white, not
+ * the template teal the current site uses.
+ *
+ * Contrast, measured (see brand/BRAND.md):
+ *   white on --magenta-ink  5.90   primary buttons
+ *   --ink on --cyan         6.16   cyan is a FILL, ink text on it
+ *   --cyan-ink on --paper   4.98   links and small cyan text
+ *   --ink on --yellow       14.2   yellow is only ever under ink
+ *   --muted on --paper      6.05   secondary text
+ * Never: cyan text on paper (3.25), white on yellow.
+ */
+:root {
+  --ink: #14161A;
+  --ink-2: #2A2D33;
+  --paper: #FAF8F4;
+  --card: #FFFFFF;
+  --sunk: #F1EEE8;
+  --line: #E3DED4;
+  --line-2: #CFC8BB;
+  --muted: #5B5F66;
+
+  --cyan: #00A0E3;
+  --cyan-ink: #0072A8;
+  --cyan-tint: #E3F4FB;
+  --magenta: #E5007E;
+  --magenta-ink: #C4006B;
+  --magenta-tint: #FCE6F1;
+  --yellow: #FFE500;
+  --yellow-tint: #FFF9C7;
+
+  --ok: #1D6B4F;   --ok-bg: #E6F3EC;
+  --warn: #8A5A00; --warn-bg: #FFF4D6;
+  --bad: #B42318;  --bad-bg: #FDECEA;
+
+  --f-sans: "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+
+  --r-sm: 6px;
+  --r: 10px;
+  --r-lg: 16px;
+  --shadow: 0 1px 2px rgba(20, 22, 26, .06), 0 8px 24px -12px rgba(20, 22, 26, .18);
+  --gutter: clamp(16px, 4vw, 40px);
+}

@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en-ZA">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Design Studio — Eminence Printing</title>
+<meta name="description" content="Put your logo on T-shirts, golf shirts, caps, mugs, banners, gazebos and vehicles. See the mockup, check your artwork and get a price — then send it to Eminence Printing on WhatsApp.">
+<link rel="canonical" href="https://www.eminenceprinting.co.za/studio/">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://www.eminenceprinting.co.za/studio/">
+<meta property="og:title" content="Design Studio — Eminence Printing">
+<meta property="og:description" content="Design it, see it, price it. Branded clothing, signage and display — Empangeni, KZN.">
+<meta property="og:image" content="https://www.eminenceprinting.co.za/assets/og/og-studio.png">
+<meta name="theme-color" content="#14161A">
+<link rel="icon" href="/assets/brand/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,400..900;1,62..125,400..900&family=JetBrains+Mono:wght@500;700&display=swap">
+<!-- Text-tool faces. CSS only; each font file downloads when it is first used. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Kalam:wght@700&family=Montserrat:wght@500;800&family=Oswald:wght@500;700&family=Pacifico&family=Permanent+Marker&family=Playfair+Display:wght@700;900&display=swap">
+<link rel="stylesheet" href="/assets/css/tokens.css">
+<link rel="stylesheet" href="/studio/studio.css">
+</head>
+<body class="studio-page">
+
+<header class="bar">
+  <a class="brand" href="/" aria-label="Eminence Printing — home">
+    <span class="dots" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+    <span class="word">Eminence<small>Design Studio</small></span>
+  </a>
+  <div class="bar-tools">
+    <button class="icon-btn" id="undo" title="Undo (Ctrl+Z)" aria-label="Undo" disabled><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+    <button class="icon-btn" id="redo" title="Redo (Ctrl+Shift+Z)" aria-label="Redo" disabled><svg viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+    <span class="saved" id="saved" aria-live="polite"></span>
+  </div>
+  <a class="bar-wa" href="https://wa.me/27789356433" target="_blank" rel="noopener">Questions? WhatsApp 078 935 6433</a>
+  <button class="btn btn-primary" id="sendTop"><span class="long">Send to Eminence</span><span class="short">Send</span></button>
+</header>
+
+<div class="restore" id="restore" hidden>
+  <span>You have a design saved on this device.</span>
+  <button class="btn btn-sm btn-ink" id="restoreYes">Pick up where you left off</button>
+  <button class="btn btn-sm btn-ghost" id="restoreNo">Start fresh</button>
+</div>
+
+<main class="studio" id="studio" data-tab="design">
+
+  <!-- ─────────────── 1. product ─────────────── -->
+  <section class="panel panel-product" aria-labelledby="h-product">
+    <h2 class="eyebrow" id="h-product"><span class="step">1</span> Product</h2>
+    <div class="products" id="products"></div>
+
+    <div class="field">
+      <div class="label" id="l-size">Size</div>
+      <div class="chips" id="sizes" role="radiogroup" aria-labelledby="l-size"></div>
+    </div>
+    <div class="field">
+      <div class="label"><span id="l-colour">Colour</span> <span class="val" id="colourName"></span></div>
+      <div class="swatches" id="colours" role="radiogroup" aria-labelledby="l-colour"></div>
+    </div>
+    <div class="field" id="stockField" hidden>
+      <label class="label" for="stock">Paper</label>
+      <select id="stock"></select>
+    </div>
+    <div class="field" id="optionsField" hidden></div>
+    <div class="field">
+      <div class="label" id="l-process">Print method</div>
+      <div class="processes" id="processes" role="radiogroup" aria-labelledby="l-process"></div>
+    </div>
+  </section>
+
+  <!-- ─────────────── 2. design ─────────────── -->
+  <section class="panel panel-design" aria-labelledby="h-design">
+    <div class="design-head">
+      <h2 class="eyebrow" id="h-design"><span class="step">2</span> Design</h2>
+      <div class="surfaces" id="surfaces" role="tablist" aria-label="Print positions"></div>
+    </div>
+
+    <div class="toolbar" role="toolbar" aria-label="Design tools">
+      <button class="tool tool-main" id="addImage"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>Upload logo</button>
+      <button class="tool tool-main" id="addText"><svg viewBox="0 0 24 24"><path d="M5 6V4h14v2"/><path d="M12 4v16"/><path d="M9 20h6"/></svg>Add text</button>
+      <span class="tool-sep" aria-hidden="true"></span>
+      <span class="sel-tools" id="selTools" hidden>
+        <button class="tool" id="centre" title="Centre on the print area"><svg viewBox="0 0 24 24"><path d="M12 3v18"/><rect x="6" y="8" width="12" height="8" rx="1"/></svg><span>Centre</span></button>
+        <button class="tool" id="fit" title="As big as fits inside the print area"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg><span>Fit</span></button>
+        <button class="tool" id="fill" title="Cover the whole area, to the bleed line"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="1"/><path d="M3 15l5-5 5 5 3-3 5 5"/></svg><span>Fill</span></button>
+        <button class="tool" id="dup" title="Duplicate (Ctrl+D)"><svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="1"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg></button>
+        <button class="tool" id="fwd" title="Bring forward"><svg viewBox="0 0 24 24"><path d="m6 11 6-6 6 6"/><path d="M12 5v14"/></svg></button>
+        <button class="tool" id="back" title="Send backward"><svg viewBox="0 0 24 24"><path d="m6 13 6 6 6-6"/><path d="M12 19V5"/></svg></button>
+        <button class="tool tool-danger" id="del" title="Delete (Del)"><svg viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 13h10l1-13"/><path d="M9 7V4h6v3"/></svg><span>Delete</span></button>
+      </span>
+    </div>
+
+    <div class="canvas-wrap" id="canvasWrap">
+      <canvas id="editor" aria-label="Print area editor. Drag artwork to move it; drag a corner to resize; drag the round handle to rotate."></canvas>
+      <div class="drop-hint" id="dropHint" hidden>Drop to place it on <b id="dropSurface">front</b></div>
+      <div class="empty-cta" id="emptyCta">
+        <button class="btn btn-primary" id="emptyUpload">Upload your logo</button>
+        <button class="btn btn-ghost" id="emptyText">Add text</button>
+        <button class="link-btn" id="sample">or try it with a sample logo</button>
+        <p class="hint">PNG, JPG, SVG or PDF · up to 40 MB · vector is best</p>
+      </div>
+      <input type="file" id="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,application/pdf,.ai,.eps,.svg,.pdf" hidden multiple>
+    </div>
+    <p class="kbd-hint">Drag to move · corner to resize · round handle to rotate · <kbd>Alt</kbd> turns snapping off · arrows nudge 1 mm (<kbd>Shift</kbd> 10 mm)</p>
+
+    <div class="inspector" id="inspector"></div>
+  </section>
+
+  <!-- ─────────────── 3. preview + quote ─────────────── -->
+  <section class="panel panel-preview" aria-labelledby="h-preview">
+    <div class="preview-head">
+      <h2 class="eyebrow" id="h-preview"><span class="step">3</span> Preview</h2>
+      <div class="views" id="views" role="tablist" aria-label="Product view"></div>
+    </div>
+    <div class="stage" id="stage"></div>
+    <p class="stage-hint" id="stageHint"></p>
+    <div class="checks" id="checks" aria-live="polite"></div>
+
+    <div class="field qty-field">
+      <div class="label" id="l-qty">How many?</div>
+      <div id="qty"></div>
+    </div>
+
+    <div class="quote" id="quote" aria-live="polite"></div>
+
+    <button class="btn btn-primary btn-block" id="send">Send to Eminence</button>
+    <button class="btn btn-ghost btn-block" id="proofBtn">Download proof sheet</button>
+    <p class="fine">Nothing is charged here. Eminence confirms the price and sends a production proof before anything is printed.</p>
+  </section>
+
+</main>
+
+<nav class="tabs" aria-label="Studio sections">
+  <button data-tab="product">Product</button>
+  <button data-tab="design" aria-current="true">Design</button>
+  <button data-tab="preview">Preview &amp; price</button>
+</nav>
+
+<!-- ─────────────── send dialog ─────────────── -->
+<dialog class="sheet" id="sendDialog" aria-labelledby="sendTitle">
+  <form method="dialog" id="sendForm" novalidate>
+    <header>
+      <h2 id="sendTitle">Send your design to Eminence</h2>
+      <button class="icon-btn" value="cancel" formnovalidate aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </header>
+    <p class="sheet-lede">We'll reply on WhatsApp with your confirmed price and a production proof. Your original files go with the order.</p>
+    <div class="grid2">
+      <label>Your name <input name="name" autocomplete="name" required></label>
+      <label>WhatsApp number <input name="phone" type="tel" autocomplete="tel" inputmode="tel" required placeholder="07x xxx xxxx"></label>
+    </div>
+    <label>Email <span class="opt">optional</span> <input name="email" type="email" autocomplete="email"></label>
+    <label>Company <span class="opt">optional — for the invoice</span> <input name="company" autocomplete="organization"></label>
+    <fieldset class="seg">
+      <legend>Getting it to you</legend>
+      <label><input type="radio" name="delivery" value="Collect in Empangeni" checked> Collect</label>
+      <label><input type="radio" name="delivery" value="Deliver"> Deliver</label>
+      <label><input type="radio" name="delivery" value="Install on site"> Install</label>
+    </fieldset>
+    <label id="addrField" hidden>Delivery or site address <input name="address" autocomplete="street-address"></label>
+    <label>Needed by <span class="opt">optional</span> <input name="needBy" type="date"></label>
+    <label>Anything else? <span class="opt">optional</span> <textarea name="notes" rows="3" placeholder="e.g. match our Pantone 286, names on the back of each shirt…"></textarea></label>
+    <div class="send-summary" id="sendSummary"></div>
+    <div class="progress" id="progress" hidden><span></span></div>
+    <p class="form-error" id="sendError" role="alert" hidden></p>
+    <footer>
+      <button class="btn btn-ghost" value="cancel" formnovalidate>Keep designing</button>
+      <button class="btn btn-primary" id="sendGo" value="default">Send on WhatsApp</button>
+    </footer>
+  </form>
+  <div class="sent" id="sent" hidden>
+    <div class="sent-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+    <h2>Your design is on its way</h2>
+    <p>Reference <b class="mono" id="sentRef"></b></p>
+    <p id="sentText"></p>
+    <div class="sent-actions">
+      <a class="btn btn-primary" id="sentWa" target="_blank" rel="noopener">Open WhatsApp again</a>
+      <button class="btn btn-ghost" id="sentProof">Download proof</button>
+      <button class="btn btn-ghost" id="sentClose">Back to the Studio</button>
+    </div>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script type="module" src="/studio/js/app.js"></script>
+</body>
+</html>
