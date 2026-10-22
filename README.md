@@ -61,6 +61,18 @@ A plain static server works for everything except `/api`:
 
 ## The Design Studio — `site/studio/`
 
+The storefront workspace now has a searchable product chooser, a large central
+artwork/mockup switch, selectable layers, a separate order panel and clean mockup
+downloads. Mobile uses Product / Design / Preview & price tabs.
+
+For embedding in another website, see [`site/studio/EMBED.md`](site/studio/EMBED.md)
+and the working `/studio/embed-demo.html`. The host receives the design, proof and
+original files through a completion callback; commerce cart/checkout adapters are
+still supplied by the host. Research and verification notes are in
+[`research/STUDIO-UX.md`](research/STUDIO-UX.md). Run the browser regression suite
+with `node build/studio-test.mjs` while the local server is running on port 8125
+(requires the build dependencies and Microsoft Edge).
+
 Built on the DesignCo studio's lessons — real millimetres, per-product DPI
 thresholds, artwork under the lighting — and extended:
 

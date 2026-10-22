@@ -12,10 +12,10 @@
 import { PRODUCTS, GROUPS, PROCESSES, surfaceSize, effectiveDpi, dpiVerdict, isDark, contrastRatio, luminance } from "./products.js";
 import { quote as priceQuote, rand, rand2, PRICES_CONFIRMED } from "./pricing.js";
 import { loadAsset, applyBackgroundRemoval, restoreBackground } from "./artwork.js";
-import { History, uid, FONTS, newTextLayer, carryOver, saveDraft, loadDraft, clearDraft } from "./doc.js";
+import { History, uid, FONTS, newTextLayer, carryOver, saveDraft, loadDraft, clearDraft, setDraftScope } from "./doc.js";
 import { layerSize, layerCorners, designBounds, composeSurface, ensureFonts } from "./compose.js";
 import { Editor } from "./editor.js";
-import { renderMockup, viewFor } from "./render/index.js";
+import { renderMockup, snapshotMockup, viewFor } from "./render/index.js";
 import { loadManifest } from "./render/photo.js";
 import { buildSpec, renderProof, jobRef, toBlob, download } from "./proof.js";
 import { uploadJob, orderMessage, whatsappUrl } from "./handoff.js";
@@ -24,6 +24,41 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const mm = (n) => `${Math.round(n)} mm`;
+const embedParams = new URLSearchParams(location.search);
+let hostOrigin = null;
+try {
+  const origin = new URL(embedParams.get('parentOrigin'));
+  if (embedParams.get('embed') === '1' && parent !== window && ['https:', 'http:'].includes(origin.protocol)) hostOrigin = origin.origin;
+} catch { /* Standalone studio. */ }
+if (hostOrigin) {
+  setDraftScope(`${hostOrigin}:${embedParams.get('product') || 'tee'}`);
+  document.body.classList.add('is-embedded');
+  const accent = embedParams.get('accent');
+  if (/^#[\da-f]{6}$/i.test(accent || '')) document.body.style.setProperty('--magenta-ink', accent);
+  $('#sendTop .long').textContent = 'Use this design';
+  $('#sendTop .short').textContent = 'Use design';
+}
+
+// Keep one editor and one preview; switching views never duplicates design state.
+$('#artworkTools').append($('.toolbar'), $('#emptyCta'));
+function setMode(mode) {
+  $('#studio').dataset.mode = mode;
+  $('#editMode').setAttribute('aria-pressed', String(mode === 'edit'));
+  $('#previewMode').setAttribute('aria-pressed', String(mode === 'preview'));
+  requestAnimationFrame(() => { editor.resize(); updateMockup(); });
+}
+$('#editMode').onclick = () => setMode('edit');
+$('#previewMode').onclick = () => setMode('preview');
+$('#showGuides').onchange = () => updateMockup();
+$('#chooseProduct').onclick = () => { $('#catalogDialog').showModal(); $('#productSearch').focus(); };
+$('#closeCatalog').onclick = () => $('#catalogDialog').close();
+$('#productSearch').oninput = filterProducts;
+function filterProducts() {
+  const query = $('#productSearch').value.trim().toLowerCase();
+  $$('#products .pbtn').forEach(b => { b.hidden = !b.textContent.toLowerCase().includes(query); });
+  $$('#products .pgroup').forEach(g => { g.hidden = !g.querySelector('.pbtn:not([hidden])'); });
+  $('#noProducts').hidden = !!$('#products .pbtn:not([hidden])');
+}
 
 /* ─────────────────────────── state ─────────────────────────── */
 const state = {
@@ -35,6 +70,7 @@ const assets = new Map();
 const history = new History();
 const tex = {}, texCanvas = {};
 const texVersion = {};
+let transferSource = null;
 
 const P = () => PRODUCTS[state.productId];
 const S = () => P().sizes.find((s) => s.id === state.sizeId) ?? P().sizes[0];
@@ -60,7 +96,8 @@ function selectProduct(id, { keepDesign = true } = {}) {
   const from = P();
   const to = PRODUCTS[id];
   if (!to) return;
-  const carried = keepDesign && from !== to ? carryOver(state.designs, from, to, (p, s) => surfaceSize(p, p.sizes[0], s)) : keepDesign ? state.designs : {};
+  const source = transferSource ?? { designs: state.designs, productId: state.productId };
+  const carried = keepDesign && from !== to ? carryOver(source.designs, PRODUCTS[source.productId], to, (p, s) => surfaceSize(p, p.sizes[0], s)) : keepDesign ? state.designs : {};
   state.productId = id;
   state.sizeId = to.sizes.find((s) => s.id === "M")?.id ?? to.sizes[0].id;
   state.colour = to.colours[0].hex;
@@ -78,19 +115,22 @@ function selectProduct(id, { keepDesign = true } = {}) {
   clearTextures();
   renderProductPanel();
   refreshAll();
-  commit();
+  commit(false, false);
   const u = new URL(location.href); u.searchParams.set("product", id); window.history.replaceState(null, "", u);
 }
 
 /* ─────────────────────────── panel: product ─────────────────────────── */
 function renderProductPanel() {
   const p = P();
+  $('#productName').textContent = p.name;
+  $('#productBlurb').textContent = p.blurb;
   $("#products").innerHTML = GROUPS.map((g) => {
     const items = Object.entries(PRODUCTS).filter(([, x]) => x.group === g);
     if (!items.length) return "";
     return `<div class="pgroup"><h3>${g}</h3><div class="pgrid">${items.map(([k, x]) =>
       `<button class="pbtn" data-p="${k}" aria-pressed="${k === state.productId}"><b>${esc(x.name)}</b><span>${esc(x.blurb)}</span></button>`).join("")}</div></div>`;
   }).join("");
+  filterProducts();
 
   $("#sizes").innerHTML = p.sizes.map((s) => `<button class="chip" role="radio" data-s="${s.id}" aria-checked="${s.id === state.sizeId}">${esc(s.label)}</button>`).join("");
   $("#colours").innerHTML = p.colours.map((c) => `<button class="sw" role="radio" data-c="${c.hex}" aria-checked="${c.hex === state.colour}" aria-label="${esc(c.name)}" title="${esc(c.name)}" style="background:${c.hex}"></button>`).join("");
@@ -115,7 +155,7 @@ function renderProcesses() {
   }).join("");
 }
 
-$("#products").addEventListener("click", (e) => { const b = e.target.closest("[data-p]"); if (b && b.dataset.p !== state.productId) selectProduct(b.dataset.p); });
+$("#products").addEventListener("click", (e) => { const b = e.target.closest("[data-p]"); if (!b) return; if (b.dataset.p !== state.productId) selectProduct(b.dataset.p); $('#catalogDialog').close(); goTab('design'); });
 $("#sizes").addEventListener("click", (e) => { const b = e.target.closest("[data-s]"); if (!b) return; state.sizeId = b.dataset.s; renderProductPanel(); refreshAll(); commit(); });
 $("#colours").addEventListener("click", (e) => { const b = e.target.closest("[data-c]"); if (!b) return; state.colour = b.dataset.c; renderProductPanel(); refreshAll(); commit(); });
 $("#processes").addEventListener("click", (e) => { const b = e.target.closest("[data-pr]"); if (!b) return; state.process = b.dataset.pr; renderProcesses(); refreshAll(); commit(); });
@@ -125,6 +165,10 @@ $("#optionsField").addEventListener("change", (e) => { const i = e.target.closes
 /* ─────────────────────────── panel: surfaces & views ─────────────────────────── */
 function renderSurfaces() {
   const p = P();
+  $('#previewLabel').textContent = `${p.name} · ${colourName()} · ${S().label}`;
+  $('#workspaceSubtitle').textContent = `${p.name} / ${p.blurb}`;
+  const area = areaOf();
+  $('#areaInfo').textContent = `${surf().label} · ${mm(area.w)} × ${mm(area.h)} print area`;
   $("#surfaces").innerHTML = p.surfaces.map((s) =>
     `<button class="surf" role="tab" data-sf="${s.id}" aria-selected="${s.id === state.surfaceId}">${esc(s.label)}${state.designs[s.id]?.length ? '<span class="pip" aria-label="has design"></span>' : ""}</button>`).join("");
 
@@ -170,12 +214,15 @@ function liveUpdate() {
 
 /* ─────────────────────────── textures & mockup ─────────────────────────── */
 function clearTextures() {
+  for (const k of Object.keys(texVersion)) texVersion[k]++;
   for (const k of Object.keys(texCanvas)) delete texCanvas[k];
   for (const k of Object.keys(tex)) { URL.revokeObjectURL(tex[k]); delete tex[k]; }
 }
 
 async function updateTextures(ids = P().surfaces.map((s) => s.id)) {
+  const productId = state.productId;
   await ensureFonts(ids.flatMap((id) => state.designs[id] || []));
+  if (state.productId !== productId) return;
   const big = ["gazebo", "banner", "flag", "vehicle", "shopfront"].includes(P().render);
   await Promise.all(ids.map(async (id) => {
     const s = P().surfaces.find((x) => x.id === id);
@@ -196,7 +243,18 @@ function renderCtx(extra = {}) {
   return { productId: state.productId, product: P(), size: S(), colour: state.colour, tex, texCanvas,
     active: state.surfaceId, yaw: state.yaw, pitch: state.pitch, options: state.options, ...extra };
 }
-function updateMockup() { renderMockup($("#stage"), renderCtx()); }
+function updateMockup() { if (state.colour) return renderMockup($("#stage"), renderCtx({ showGuides: $('#showGuides').checked })); }
+new ResizeObserver(() => updateMockup()).observe($('#stage'));
+$('#downloadMockup').onclick = async () => {
+  const button = $('#downloadMockup'); button.disabled = true;
+  try {
+    await updateTextures();
+    const dataTex = Object.fromEntries(Object.entries(texCanvas).map(([k, c]) => [k, c.toDataURL('image/png')]));
+    const canvas = await snapshotMockup(renderCtx({tex:dataTex}), viewFor(P(), state.surfaceId), 1600, 1600);
+    download(await toBlob(canvas), `${state.productId}-${viewFor(P(), state.surfaceId)}-mockup.png`);
+  } catch (error) { console.error(error); toast('Could not download this mockup. Please try again.'); }
+  finally { button.disabled = false; }
+};
 
 // Orbit for 3D products.
 {
@@ -214,6 +272,7 @@ function updateMockup() { renderMockup($("#stage"), renderCtx()); }
     updateMockup();
   });
   st.addEventListener("pointerup", () => { drag = null; });
+  st.addEventListener('pointercancel', () => { drag = null; });
 }
 
 /* ─────────────────────────── adding artwork ─────────────────────────── */
@@ -317,9 +376,16 @@ for (const id of ["centre", "fit", "fill", "dup", "fwd", "back", "del"]) $("#" +
 function renderToolbar() {
   $("#selTools").hidden = !selLayer();
   $("#emptyCta").hidden = layers().length > 0;
+  $('#layerCount').textContent = layers().length;
+  $('#layerList').innerHTML = layers().length ? [...layers()].reverse().map(l => `<button class="layer-item" data-layer="${l.id}" aria-pressed="${l.id === state.selected}"><span>${l.kind === 'text' ? 'T' : '▧'}</span><b>${esc(l.kind === 'text' ? l.text || 'Text' : assets.get(l.assetId)?.name || 'Artwork')}</b></button>`).join('') : '<p class="fine">Upload artwork or add text to get started. Each print position has its own layers.</p>';
 }
+$('#layerList').onclick = e => {
+  const button = e.target.closest('[data-layer]'); if (!button) return;
+  state.selected = button.dataset.layer; renderInspector(); renderToolbar(); editor.request(); setMode('edit'); goTab('design');
+};
 
 function afterStructuralChange() {
+  setMode('edit'); goTab('design');
   renderSurfaces(); renderInspector(); renderToolbar(); editor.request();
   commit();
 }
@@ -557,6 +623,7 @@ function refreshQuote() {
   html += q.blockers.map((b) => `<div class="q-block">${esc(b)}</div>`).join("");
   $("#quote").innerHTML = html;
   $("#send").textContent = P().quoteOnly ? "Request a site quote" : "Send to Eminence";
+  if (hostOrigin) $('#send').textContent = 'Use this design';
   return q;
 }
 
@@ -564,13 +631,14 @@ function refreshQuote() {
 function snapshot() { return { productId: state.productId, sizeId: state.sizeId, colour: state.colour, process: state.process, stock: state.stock, options: state.options, designs: state.designs }; }
 
 let draftT, lastHist = "";
-async function commit(force = false) {
+async function commit(force = false, rememberArtwork = true) {
+  if (rememberArtwork) transferSource = {productId:state.productId, designs:JSON.parse(JSON.stringify(state.designs))};
   const snap = snapshot();
   const s = JSON.stringify(snap);
   if (s !== lastHist || force) { history.push(snap); lastHist = s; }
   $("#undo").disabled = !history.canUndo; $("#redo").disabled = !history.canRedo;
   await updateTextures();
-  updateMockup(); renderChecks(); refreshQuote(); renderSurfaces();
+  updateMockup(); renderChecks(); refreshQuote(); renderSurfaces(); renderToolbar();
   clearTimeout(draftT);
   draftT = setTimeout(async () => {
     if (!designedIds().length) return;
@@ -582,6 +650,7 @@ function restoreSnap(snap) {
   if (!snap) return;
   if (snap.productId !== state.productId) clearTextures();
   Object.assign(state, JSON.parse(JSON.stringify(snap)));
+  transferSource = {productId:state.productId, designs:JSON.parse(JSON.stringify(state.designs))};
   if (!P().surfaces.some((s) => s.id === state.surfaceId)) state.surfaceId = P().surfaces[0].id;
   if (!layers().some((l) => l.id === state.selected)) state.selected = null;
   lastHist = JSON.stringify(snapshot());
@@ -640,8 +709,22 @@ $("#proofBtn").onclick = async () => {
 };
 
 const dlg = $("#sendDialog");
-function openSend() {
+async function openSend() {
   if (!designedIds().length && !P().quoteOnly) { toast("Add your design first."); goTab("design"); return; }
+  if (hostOrigin) {
+    const blockers = [...runChecks().filter(c => c.level === 'bad').map(c => c.text), ...currentQuote().blockers];
+    if (blockers.length) { toast(blockers[0], 6000); goTab('preview'); return; }
+    $('#send').disabled = $('#sendTop').disabled = true;
+    try {
+      const {spec, proof, quote} = await makeProof();
+      const used = new Set(designedIds().flatMap(id => state.designs[id].filter(l => l.kind === 'image').map(l => l.assetId)));
+      const files = [...assets.values()].filter(a => used.has(a.id)).map(a => ({ id:a.id, name:a.name, file:a.file }));
+      parent.postMessage({type:'eminence:complete', design:{spec, proof, quote, files, document:JSON.parse(JSON.stringify(state))}}, hostOrigin);
+      toast('Design ready. Continue in your store.');
+    } catch (error) { console.error(error); toast('Could not prepare the design. Please try again.'); }
+    finally { $('#send').disabled = $('#sendTop').disabled = false; }
+    return;
+  }
   const q = currentQuote();
   const qt = q.quoteOnly ? `${rand(q.range[0])}–${rand(q.range[1])} (indicative)` : `${rand2(q.total)} incl. VAT`;
   $("#sendSummary").textContent = `${q.units} × ${P().name} · ${colourName()} · ${PROCESSES[state.process].short}\n` +
@@ -706,7 +789,7 @@ function goTab(t) {
   $("#studio").dataset.tab = t;
   $$(".tabs button").forEach((b) => b.setAttribute("aria-current", String(b.dataset.tab === t)));
   if (t === "design") requestAnimationFrame(() => editor.resize());
-  if (t === "preview") updateMockup();
+  if (t === "preview") { setMode('preview'); updateMockup(); }
   scrollTo({ top: 0 });
 }
 $$(".tabs button").forEach((b) => (b.onclick = () => goTab(b.dataset.tab)));
@@ -723,6 +806,7 @@ function hideToast() { $("#toast").hidden = true; }
   const start = PRODUCTS[params.get("product")] ? params.get("product") : "tee";
   state.productId = start;
   selectProduct(start, { keepDesign: false });
+  if (hostOrigin) parent.postMessage({type:'eminence:ready'}, hostOrigin);
   if (params.get("process") && P().processes.includes(params.get("process"))) { state.process = params.get("process"); renderProcesses(); refreshAll(); }
 
   const draft = await loadDraft();

@@ -16,7 +16,7 @@ export function drawMug(canvas, { colour, texCanvas, yaw = 28, active, printW = 
   // An explicit w/h is an offscreen export (the proof); otherwise fill the element.
   const dpr = opts.w ? 1 : Math.min(2, devicePixelRatio || 1);
   const cw = opts.w || canvas.clientWidth || 600, ch = opts.h || canvas.clientHeight || 600;
-  if (canvas.width !== Math.round(cw * dpr)) { canvas.width = Math.round(cw * dpr); canvas.height = Math.round(ch * dpr); }
+  if (canvas.width !== Math.round(cw * dpr) || canvas.height !== Math.round(ch * dpr)) { canvas.width = Math.round(cw * dpr); canvas.height = Math.round(ch * dpr); }
   const g = canvas.getContext("2d");
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
   g.clearRect(0, 0, cw, ch);

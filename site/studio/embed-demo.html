@@ -1,0 +1,7 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Studio embed example</title>
+<style>body{margin:0;padding:24px;background:#f4f5f7;font-family:system-ui,sans-serif}h1{font-size:22px}#result{padding:12px}#customizer{background:white;border:1px solid #ddd;border-radius:12px;overflow:hidden}</style>
+<h1>Customize your product</h1><div id="customizer"></div><p id="result" role="status">Choose your artwork, then select “Use this design”.</p>
+<script type="module">
+import {mountStudio} from './embed.js';
+mountStudio('#customizer',{product:'tee',onComplete(design){window.receivedDesign=design;document.querySelector('#result').textContent=`Design ${design.spec.ref} received. The store can now attach it to a cart item.`;}});
+</script></html>

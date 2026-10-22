@@ -49,10 +49,10 @@ export const FITS = {
     shoulderY: 150, shoulderDip: 118,
     sleeve: { tipX: 38, topY: 300, cuffOutX: 72, cuffOutY: 452, cuffInX: 158, cuffInY: 470 },
     armpitY: 432, hem: { y: 1090, l: 182, r: 818 },
-    neck: { front: { cy: 192, rx: 104, ry: 50 }, back: { cy: 172, rx: 98, ry: 28 } },
+    neck: { front: { cy: 164, rx: 90, ry: 38 }, back: { cy: 150, rx: 88, ry: 20 } },
     areas: {
       "chest-left": { cx: 629, cy: 400 }, "chest-right": { cx: 371, cy: 400 },
-      front: { cx: 500, cy: 640 }, back: { cx: 500, cy: 620 },
+      front: { cx: 500, cy: 560 }, back: { cx: 500, cy: 580 },
       neck: { cx: 500, cy: 262 }, "sleeve-right": { cx: 112, cy: 368, rot: 14 },
     },
   },
@@ -99,8 +99,9 @@ export const CAP_VIEW = { w: 1000, h: 700, crown: 640, widthMm: 200 };
 const CAP_CROWN = "M 186 430 C 182 288, 232 160, 360 124 C 420 108, 580 108, 640 124 C 768 160, 818 288, 814 430 Z";
 const CAP_PEAK = "M 228 424 C 242 468, 330 510, 436 522 C 470 526, 530 526, 564 522 C 670 510, 758 468, 772 424 C 730 402, 628 394, 500 394 C 372 394, 270 402, 228 424 Z";
 
-function garmentPath(f) {
+function garmentPath(f, view = 'front') {
   const [L, R] = f.torso, s = f.sleeve;
+  const n = f.neck[view] ?? f.neck.front;
   const { y: hemY, l: hemL, r: hemR } = f.hem;
   const tipR = 1000 - s.tipX, cuffOutR = 1000 - s.cuffOutX, cuffInR = 1000 - s.cuffInX;
   return [
@@ -118,7 +119,9 @@ function garmentPath(f) {
     `L ${cuffOutR} ${s.cuffOutY}`,
     `C ${cuffOutR + 22} ${s.cuffOutY - 62}, ${tipR + 10} ${s.topY + 44}, ${tipR} ${s.topY}`,
     `C ${tipR - 64} ${s.topY - 56}, ${R + 46} ${f.shoulderY + 18}, ${R} ${f.shoulderY}`,
-    `C ${R - 70} ${f.shoulderDip}, ${L + 70} ${f.shoulderDip}, ${L} ${f.shoulderY}`,
+    `L ${500 + n.rx + 15} ${f.shoulderDip}`,
+    `C ${500 + n.rx} ${n.cy + n.ry + 35}, ${500 - n.rx} ${n.cy + n.ry + 35}, ${500 - n.rx - 15} ${f.shoulderDip}`,
+    `L ${L} ${f.shoulderY}`,
     "Z",
   ].join(" ");
 }
@@ -133,9 +136,9 @@ function hoodPath(f) {
 export function defs(id, seed) {
   return `
     <linearGradient id="${id}-side" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#000" stop-opacity=".26"/><stop offset=".20" stop-color="#000" stop-opacity=".05"/>
+      <stop offset="0" stop-color="#000" stop-opacity=".14"/><stop offset=".20" stop-color="#000" stop-opacity=".025"/>
       <stop offset=".45" stop-color="#000" stop-opacity="0"/><stop offset=".72" stop-color="#000" stop-opacity=".04"/>
-      <stop offset="1" stop-color="#000" stop-opacity=".28"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".16"/>
     </linearGradient>
     <linearGradient id="${id}-drop" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#000" stop-opacity=".14"/><stop offset=".24" stop-color="#000" stop-opacity="0"/>
@@ -159,11 +162,11 @@ export function defs(id, seed) {
     </filter>
     <filter id="${id}-warp" x="-14%" y="-14%" width="128%" height="128%" color-interpolation-filters="sRGB">
       <feTurbulence type="fractalNoise" baseFrequency="0.0055 0.0042" numOctaves="2" seed="${seed + 3}" result="n"/>
-      <feDisplacementMap in="SourceGraphic" in2="n" scale="13" xChannelSelector="R" yChannelSelector="G"/>
+      <feDisplacementMap in="SourceGraphic" in2="n" scale="4" xChannelSelector="R" yChannelSelector="G"/>
     </filter>
     <filter id="${id}-soft" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="34"/></filter>
     <filter id="${id}-cast" x="-25%" y="-15%" width="150%" height="140%">
-      <feDropShadow dx="0" dy="22" stdDeviation="24" flood-color="#000" flood-opacity=".20"/>
+      <feDropShadow dx="0" dy="16" stdDeviation="18" flood-color="#000" flood-opacity=".13"/>
     </filter>`;
 }
 
@@ -195,7 +198,7 @@ export function garmentSvg({ fit, colour, view, widthMm, areas, id = "g", seed =
   const V = f.view;
   const upm = (f.torso[1] - f.torso[0]) / widthMm;
   const n = f.neck[view] ?? f.neck.front;
-  const body = garmentPath(f);
+  const body = garmentPath(f, view);
   const placed = areas.filter((p) => f.areas[p.surfaceId]).map((p) => placement({ ...p, area: f.areas[p.surfaceId] }, upm, `${id}-warp`));
   const rib = shade(colour, 0.9), hole = shade(colour, 0.72);
   const [L, R] = f.torso, s = f.sleeve;
@@ -246,9 +249,10 @@ export function garmentSvg({ fit, colour, view, widthMm, areas, id = "g", seed =
           fill="${shade(colour, 0.95)}" stroke="#000" stroke-opacity=".2" stroke-width="2.5"/>`;
 
   const neckHole = f.collar ? "" : `
-      <ellipse cx="500" cy="${n.cy}" rx="${n.rx + 15}" ry="${n.ry + 13}" fill="${rib}" stroke="#000" stroke-opacity=".16" stroke-width="2.5"/>
-      <ellipse cx="500" cy="${n.cy}" rx="${n.rx}" ry="${n.ry}" fill="${hole}"/>
-      <ellipse cx="500" cy="${n.cy}" rx="${n.rx}" ry="${n.ry}" fill="#000" opacity=".12"/>`;
+      <path d="M ${500 + n.rx + 15} ${f.shoulderDip} C ${500 + n.rx} ${n.cy + n.ry + 35}, ${500 - n.rx} ${n.cy + n.ry + 35}, ${500 - n.rx - 15} ${f.shoulderDip}"
+        fill="none" stroke="${rib}" stroke-width="22"/>
+      <path d="M ${500 + n.rx + 21} ${f.shoulderDip} C ${500 + n.rx + 8} ${n.cy + n.ry + 52}, ${500 - n.rx - 8} ${n.cy + n.ry + 52}, ${500 - n.rx - 21} ${f.shoulderDip}"
+        fill="none" stroke="#000" stroke-opacity=".12" stroke-width="2"/>`;
 
   return `
   <svg viewBox="0 0 ${V.w} ${V.h}" width="100%" height="100%" style="isolation:isolate;overflow:visible" xmlns="http://www.w3.org/2000/svg">
@@ -259,8 +263,9 @@ export function garmentSvg({ fit, colour, view, widthMm, areas, id = "g", seed =
       <g style="mix-blend-mode:multiply" opacity="${shadeStrength(colour)}">
         <rect width="${V.w}" height="${V.h}" fill="url(#${id}-side)"/>
         <rect width="${V.w}" height="${V.h}" fill="url(#${id}-drop)"/>
-        <rect width="${V.w}" height="${V.h}" filter="url(#${id}-folds)" opacity=".5"/>
-        <rect width="${V.w}" height="${V.h}" filter="url(#${id}-weave)" opacity=".45"/>
+        <rect width="${V.w}" height="${V.h}" filter="url(#${id}-folds)" opacity=".16"/>
+        <rect width="${V.w}" height="${V.h}" filter="url(#${id}-weave)" opacity=".08"/>
+        <path d="M ${L + 25} ${f.armpitY} Q ${L + 72} ${f.armpitY + 170} ${L + 30} ${f.hem.y - 80} M ${R - 25} ${f.armpitY} Q ${R - 65} ${f.armpitY + 160} ${R - 30} ${f.hem.y - 80}" fill="none" stroke="#000" stroke-opacity=".08" stroke-width="16" filter="url(#${id}-soft)"/>
         <g filter="url(#${id}-soft)" fill="#000">
           <ellipse cx="500" cy="${n.cy + 76}" rx="${n.rx + 46}" ry="48" opacity=".10"/>
           <ellipse cx="${L + 4}" cy="${f.armpitY + 18}" rx="70" ry="54" opacity=".07"/>
@@ -269,7 +274,7 @@ export function garmentSvg({ fit, colour, view, widthMm, areas, id = "g", seed =
       </g>
       <g style="mix-blend-mode:screen">
         <rect width="${V.w}" height="${V.h}" fill="url(#${id}-lift)"/>
-        <rect width="${V.w}" height="${V.h}" filter="url(#${id}-glow)" opacity=".34"/>
+        <rect width="${V.w}" height="${V.h}" filter="url(#${id}-glow)" opacity=".10"/>
       </g>
       ${neckHole}${pocket}
     </g>

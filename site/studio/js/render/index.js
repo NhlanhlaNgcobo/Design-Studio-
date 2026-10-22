@@ -69,21 +69,23 @@ function svgFor(ctx, view, outline) {
  * export of a given view passes that view's surface without its outline. */
 function stripUi(svg) { return svg.replace(/<[^>]+class="ui-only"[^>]*\/>/g, ""); }
 
-let lastSvg = "";
+const lastSvgs = new WeakMap();
 export async function renderMockup(stage, ctx) {
   const { product } = ctx;
   const view = ctx.view ?? viewFor(product, ctx.active);
+  const guides = ctx.showGuides !== false;
 
   if (CANVAS_KINDS.has(product.render) || (GARMENT_KINDS.has(product.render) && blankFor(ctx.productId, view))) {
     let c = stage.querySelector("canvas.mock");
-    if (!c) { stage.innerHTML = `<canvas class="mock" aria-label="Product preview"></canvas>`; c = stage.firstChild; lastSvg = ""; }
-    if (product.render === "gazebo") drawGazebo(c, ctx);
-    else if (product.render === "mug") drawMug(c, ctx);
-    else await drawPhoto(c, blankFor(ctx.productId, view), { colour: ctx.colour, sizeChestMm: ctx.size.w, placements: placements(ctx, view, true) });
+    if (!c) { stage.innerHTML = `<canvas class="mock" aria-label="Product preview"></canvas>`; c = stage.firstChild; lastSvgs.delete(stage); }
+    if (product.render === "gazebo") drawGazebo(c, { ...ctx, active: guides ? ctx.active : null });
+    else if (product.render === "mug") drawMug(c, { ...ctx, active: guides ? ctx.active : null });
+    else await drawPhoto(c, blankFor(ctx.productId, view), { colour: ctx.colour, sizeChestMm: ctx.size.w, placements: placements(ctx, view, guides) });
     return;
   }
-  const svg = svgFor(ctx, view, true);
-  if (svg !== lastSvg) { stage.innerHTML = svg; lastSvg = svg; }
+  const raw = svgFor(ctx, view, guides);
+  const svg = guides ? raw : stripUi(raw);
+  if (svg !== lastSvgs.get(stage)) { stage.innerHTML = svg; lastSvgs.set(stage, svg); }
 }
 
 /**

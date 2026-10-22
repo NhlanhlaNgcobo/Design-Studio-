@@ -28,7 +28,7 @@ export function drawGazebo(canvas, { size, colour, texCanvas, yaw = -32, pitch =
   // An explicit w/h is an offscreen export (the proof); otherwise fill the element.
   const dpr = opts.w ? 1 : Math.min(2, devicePixelRatio || 1);
   const cw = opts.w || canvas.clientWidth || 600, ch = opts.h || canvas.clientHeight || 600;
-  if (canvas.width !== Math.round(cw * dpr)) { canvas.width = Math.round(cw * dpr); canvas.height = Math.round(ch * dpr); }
+  if (canvas.width !== Math.round(cw * dpr) || canvas.height !== Math.round(ch * dpr)) { canvas.width = Math.round(cw * dpr); canvas.height = Math.round(ch * dpr); }
   const g = canvas.getContext("2d");
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
   g.clearRect(0, 0, cw, ch);
@@ -43,7 +43,8 @@ export function drawGazebo(canvas, { size, colour, texCanvas, yaw = -32, pitch =
   const cosY = Math.cos(ya), sinY = Math.sin(ya), cosP = Math.cos(pa), sinP = Math.sin(pa);
   const span = Math.max(W, D, PEAK) * 1.32;
   const dist = span * 3.2;
-  const F = (Math.min(cw, ch) * dist) / span * 0.82;
+  let F = (Math.min(cw, ch) * dist) / span * 0.82;
+  let offsetX = 0, offsetY = 0;
   // Where the camera sits in world space — used to tell outside from inside.
   const eye = [-dist * cosP * sinY, dist * sinP + cy0, dist * cosP * cosY];
   const P = ([x, y, z]) => {
@@ -51,8 +52,22 @@ export function drawGazebo(canvas, { size, colour, texCanvas, yaw = -32, pitch =
     const x1 = x * cosY + z * sinY, z1 = -x * sinY + z * cosY;
     const y2 = y * cosP - z1 * sinP, z2 = y * sinP + z1 * cosP;
     const k = F / (dist - z2);
-    return [cw / 2 + x1 * k, ch * 0.54 - y2 * k, z2];
+    return [cw / 2 + x1 * k + offsetX, ch * 0.54 - y2 * k + offsetY, z2];
   };
+
+  // Fit the complete projected structure, including all feet, at every orbit.
+  const bounds = [[0, PEAK, 0], ...[-1, 1].flatMap(x => [-1, 1].flatMap(z =>
+    [0, LEG].map(y => [x * W / 2, y, z * D / 2])))];
+  const measure = () => {
+    const points = bounds.map(P);
+    return [Math.min(...points.map(p => p[0])), Math.max(...points.map(p => p[0])),
+      Math.min(...points.map(p => p[1])), Math.max(...points.map(p => p[1]))];
+  };
+  const b = measure();
+  F *= Math.min(cw * .82 / (b[1] - b[0]), ch * .82 / (b[3] - b[2]));
+  const fitted = measure();
+  offsetX = cw / 2 - (fitted[0] + fitted[1]) / 2;
+  offsetY = ch / 2 - (fitted[2] + fitted[3]) / 2;
 
   /* faces: [corners, uv per corner (0..1), texture, base colour, label] */
   const fr = [-W / 2, LEG, D / 2], fl = [W / 2, LEG, D / 2], bl = [W / 2, LEG, -D / 2], br = [-W / 2, LEG, -D / 2];

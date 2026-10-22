@@ -43,15 +43,16 @@
   <button class="btn btn-sm btn-ghost" id="restoreNo">Start fresh</button>
 </div>
 
-<main class="studio" id="studio" data-tab="design">
+<main class="studio" id="studio" data-tab="design" data-mode="preview">
 
   <!-- ─────────────── 1. product ─────────────── -->
   <section class="panel panel-product" aria-labelledby="h-product">
     <h2 class="eyebrow" id="h-product"><span class="step">1</span> Product</h2>
-    <div class="products" id="products"></div>
+    <button class="selected-product" id="chooseProduct" aria-haspopup="dialog"><span><b id="productName">T-shirt</b><small id="productBlurb"></small></span><span class="change-label">Change ↗</span></button>
+    <div id="artworkTools"></div>
 
     <div class="field">
-      <div class="label" id="l-size">Size</div>
+      <div class="label" id="l-size">Preview size</div>
       <div class="chips" id="sizes" role="radiogroup" aria-labelledby="l-size"></div>
     </div>
     <div class="field">
@@ -63,18 +64,20 @@
       <select id="stock"></select>
     </div>
     <div class="field" id="optionsField" hidden></div>
-    <div class="field">
+    <details class="method-details"><summary>Printing options</summary><div class="field">
       <div class="label" id="l-process">Print method</div>
       <div class="processes" id="processes" role="radiogroup" aria-labelledby="l-process"></div>
-    </div>
+    </div></details>
+    <div class="layer-section"><h3>Your artwork <span id="layerCount">0</span></h3><div id="layerList"></div></div>
   </section>
 
   <!-- ─────────────── 2. design ─────────────── -->
   <section class="panel panel-design" aria-labelledby="h-design">
     <div class="design-head">
-      <h2 class="eyebrow" id="h-design"><span class="step">2</span> Design</h2>
-      <div class="surfaces" id="surfaces" role="tablist" aria-label="Print positions"></div>
+      <div><h2 id="h-design">Make it yours.</h2><p id="workspaceSubtitle">Your design. Your product. Every detail.</p></div>
+      <div class="mode-switch" role="group" aria-label="Workspace view"><button id="editMode" aria-pressed="false">Edit artwork</button><button id="previewMode" aria-pressed="true">Product preview</button></div>
     </div>
+    <div class="placement-bar"><span>Print position</span><div class="surfaces" id="surfaces" role="tablist" aria-label="Print positions"></div></div>
 
     <div class="toolbar" role="toolbar" aria-label="Design tools">
       <button class="tool tool-main" id="addImage"><svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>Upload logo</button>
@@ -102,19 +105,18 @@
       </div>
       <input type="file" id="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,application/pdf,.ai,.eps,.svg,.pdf" hidden multiple>
     </div>
+    <div class="mockup-workspace" id="mockupWorkspace"><div class="mockup-top"><span id="previewLabel">T-shirt · White</span><label><input type="checkbox" id="showGuides"> Show print area</label></div><div class="stage" id="stage"></div><div class="mockup-bottom"><div class="views" id="views" role="tablist" aria-label="Product view"></div><button class="link-btn" id="downloadMockup">Download mockup ↓</button></div><p class="stage-hint" id="stageHint"></p></div>
+    <div class="workspace-footer"><span id="areaInfo"></span><span>Placement preview · final proof before printing</span></div>
     <p class="kbd-hint">Drag to move · corner to resize · round handle to rotate · <kbd>Alt</kbd> turns snapping off · arrows nudge 1 mm (<kbd>Shift</kbd> 10 mm)</p>
 
-    <div class="inspector" id="inspector"></div>
   </section>
 
   <!-- ─────────────── 3. preview + quote ─────────────── -->
   <section class="panel panel-preview" aria-labelledby="h-preview">
     <div class="preview-head">
-      <h2 class="eyebrow" id="h-preview"><span class="step">3</span> Preview</h2>
-      <div class="views" id="views" role="tablist" aria-label="Product view"></div>
+      <h2 class="eyebrow" id="h-preview">Design &amp; order</h2>
     </div>
-    <div class="stage" id="stage"></div>
-    <p class="stage-hint" id="stageHint"></p>
+    <div class="inspector" id="inspector"></div>
     <div class="checks" id="checks" aria-live="polite"></div>
 
     <div class="field qty-field">
@@ -130,6 +132,8 @@
   </section>
 
 </main>
+
+<dialog class="catalog-dialog" id="catalogDialog" aria-labelledby="catalogTitle"><header><div><h2 id="catalogTitle">Choose your canvas.</h2><p>Find the right product for your next idea.</p></div><button class="icon-btn" id="closeCatalog" aria-label="Close product chooser">✕</button></header><label class="catalog-search">Search products<input type="search" id="productSearch" placeholder="Try T-shirt, mug or banner…"></label><div class="products" id="products"></div><p id="noProducts" hidden>No matching products. Try a different search.</p></dialog>
 
 <nav class="tabs" aria-label="Studio sections">
   <button data-tab="product">Product</button>
