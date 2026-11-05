@@ -161,7 +161,7 @@ kbd { font-family: var(--f-mono); font-size: .7rem; border: 1px solid var(--line
 .stage { position: relative; aspect-ratio: 1; margin-top: 12px; border-radius: var(--r-lg); overflow: hidden; display: grid; place-items: center;
   background: radial-gradient(110% 90% at 50% 15%, #fff 0%, var(--sunk) 75%); border: 1px solid var(--line); touch-action: none; }
 .stage > svg { width: 92%; height: 92%; }
-.stage canvas.mock { width: 100%; height: 100%; display: block; }
+.stage canvas.mock { position: absolute; inset: 0; width: 100%; height: 100%; display: block; object-fit: contain; }
 .stage.grab { cursor: grab; } .stage.grab:active { cursor: grabbing; }
 .stage-hint { margin: 6px 0 0; font-size: .74rem; color: var(--muted); text-align: center; min-height: 1em; }
 
@@ -392,3 +392,51 @@ kbd { font-family: var(--f-mono); font-size: .7rem; border: 1px solid var(--line
 .is-embedded #sendTop { margin-left:auto; }
 .is-embedded .panel-preview>.fine { font-size:0; }
 .is-embedded .panel-preview>.fine::after { content:'Continue in the store to confirm your order. Prices shown here are estimates.'; font-size:11px; }
+
+/* Editing on the garment colour: the backdrop is a softened version of the
+   chosen colour, the print area itself is the exact colour. */
+.canvas-wrap { background: radial-gradient(rgba(20,22,26,.12) .8px, transparent .8px) 0 0/16px 16px, color-mix(in srgb, var(--garment, #fff) 62%, #eceef2); transition: background-color .2s; }
+.canvas-wrap.dark { background: radial-gradient(rgba(255,255,255,.12) .8px, transparent .8px) 0 0/16px 16px, color-mix(in srgb, var(--garment, #fff) 80%, #5a5e66); }
+.edit-colours { position: absolute; z-index: 2; top: 10px; right: 10px; display: flex; align-items: center; gap: 8px; max-width: calc(100% - 20px); padding: 6px 8px; border-radius: 999px; background: rgba(255,255,255,.92); box-shadow: 0 1px 4px rgba(20,22,26,.15); font-size: 11px; font-weight: 600; color: var(--muted); }
+.edit-colours[hidden] { display: none; }
+.edit-colours .swatches { gap: 4px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.edit-colours .sw { width: 18px; height: 18px; flex: none; border-width: 1.5px; }
+
+/* Print size: real centimetres, the A-size it matches, the resolution. */
+.print-size { margin: 10px 0 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--sunk); }
+.ps-read { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: .8rem; }
+.ps-read b { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: .86rem; }
+.ps-read span { color: var(--muted); }
+.ps-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.chip { border: 1px solid var(--line-2); background: #fff; border-radius: 6px; padding: 4px 9px; font: 600 .74rem "JetBrains Mono", ui-monospace, monospace; cursor: pointer; }
+.chip:hover:not(:disabled) { border-color: var(--ink); }
+.chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #fff; }
+.chip:disabled { opacity: .35; cursor: not-allowed; }
+
+
+/* Your details + templates (business and welcome cards) */
+.details-field .label .val { font-weight: 500; }
+.tpl-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.tpl { display: flex; flex-direction: column; gap: 5px; padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: #fff; cursor: pointer; font: 600 .74rem var(--f-sans, inherit); color: var(--ink); text-align: left; }
+.tpl:hover { border-color: var(--ink); }
+.tpl-img { display: grid; place-items: center; aspect-ratio: 1.6; border-radius: 6px; background: var(--sunk); overflow: hidden; }
+.tpl-img img { max-width: 100%; max-height: 100%; box-shadow: 0 1px 4px rgba(20,22,26,.25); }
+.details { display: grid; gap: 7px; }
+.details label, .brand-row { display: flex; flex-direction: column; gap: 3px; font-size: .74rem; font-weight: 600; color: var(--muted); }
+.details input, .details textarea { border: 1px solid var(--line-2); border-radius: 8px; padding: 7px 9px; font: 500 .84rem var(--f-sans, inherit); color: var(--ink); background: #fff; resize: vertical; }
+.brand-row { flex-direction: row; align-items: center; justify-content: space-between; margin-top: 10px; }
+.brand-row input { width: 44px; height: 28px; border: 1px solid var(--line-2); border-radius: 6px; padding: 2px; background: #fff; }
+
+/* Turning products: setting chips, 360° and zoom */
+.scenes { display: inline-flex; gap: 2px; padding: 2px; border-radius: 999px; background: var(--sunk); }
+.scenes button { border: 0; background: transparent; border-radius: 999px; padding: 4px 10px; font: 600 .74rem var(--f-sans, inherit); color: var(--muted); cursor: pointer; }
+.scenes button[aria-checked="true"] { background: var(--ink); color: #fff; }
+.turn-tools { display: inline-flex; align-items: center; gap: 10px; margin-left: auto; margin-right: 14px; }
+.turn-tools[hidden] { display: none; }
+.turn-tools #zoomIn, .turn-tools #zoomOut { font-size: 1.05rem; min-width: 22px; text-decoration: none; }
+
+/* Shape · Background · QR code: three equal tiles, so none is cut off in a narrow panel */
+.add-more { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; width: 100%; margin: 4px 0; }
+.add-more .tool { flex-direction: column; justify-content: center; gap: 3px; min-width: 0; padding: 7px 4px; border: 1px solid var(--line); border-radius: 8px; font-size: .72rem; }
+.add-more .tool span { display: inline !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.add-more .tool svg { width: 18px; height: 18px; }

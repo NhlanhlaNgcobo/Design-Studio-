@@ -37,7 +37,7 @@ if (process.env.MOCK) {
     if (m) { const s = +m[1], e = Math.min(+m[2], b.length - 1); res.writeHead(206, { ...cors, "Content-Range": `bytes ${s}-${e}/${b.length}`, "Content-Length": e - s + 1 }); return res.end(b.subarray(s, e + 1)); }
     res.writeHead(200, { ...cors, "Content-Length": b.length }); res.end(b);
   }).listen(8124, "127.0.0.1");
-  Object.assign(process.env, { S3_ENDPOINT: "http://127.0.0.1:8124", S3_BUCKET: "eminence-jobs", S3_ACCESS_KEY_ID: "mock", S3_SECRET_ACCESS_KEY: "mock", JOB_SECRET: "mock-secret", RESEND_API_KEY: "mock" });
+  Object.assign(process.env, { S3_ENDPOINT: "http://127.0.0.1:8124", S3_BUCKET: "eminence-jobs", S3_ACCESS_KEY_ID: "mock", S3_SECRET_ACCESS_KEY: "mock", JOB_SECRET: "mock-secret", RESEND_API_KEY: "mock", STUDIO_ADMIN_PASSWORD: "admin" });
 
   const outbox = path.join(ROOT, "build", ".outbox");
   fs.mkdirSync(outbox, { recursive: true });
@@ -52,7 +52,7 @@ if (process.env.MOCK) {
     }
     return realFetch(url, opts);
   };
-  console.log("MOCK: S3 on :8124, mail → build/.outbox/");
+  console.log("MOCK: S3 on :8124, mail → build/.outbox/, price settings password \"admin\"");
 }
 
 http.createServer(async (req, res) => {

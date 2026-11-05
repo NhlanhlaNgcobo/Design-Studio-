@@ -3,7 +3,7 @@
 A rebuild of [eminenceprinting.co.za](https://www.eminenceprinting.co.za/) for
 **Eminence Printing**, a printing and branding business in Empangeni, KwaZulu-Natal,
 plus a **Design Studio**: customers put their logo on the real product at real size,
-see the mockup, get an estimate, and send the job on WhatsApp with their original
+see the mockup, get the price, and send the job on WhatsApp with their original
 files.
 
 It follows the method used for the DesignCo project: measure the live site, separate
@@ -93,7 +93,7 @@ thresholds, artwork under the lighting — and extended:
 ### How it hangs together
 
 ```
-products.js   geometry and production rules, in mm        pricing.js  the quote engine (placeholders)
+products.js   geometry and production rules, in mm        pricing.js  the quote engine; prices set at /studio/admin/
 doc.js        layers, undo, carry-over, draft             artwork.js  load, PDF, inks, white box, bg removal
 compose.js    draws a layer stack at any scale — the editor, the mockup textures and the proof all use it
 editor.js     the print-area editor                       render/     one renderer per product family
@@ -127,9 +127,11 @@ work, a spec-sheet services list. See `brand/BRAND.md`.
 - [x] Order handoff tested end to end against mock storage and mail
 - [x] API tests pass, including AWS's published SigV4 signature
 - [ ] **Logo vector redraw** — `ASSETS.md` §2 (Codex)
-- [ ] **Photo blanks** — `ASSETS.md` §3 (Codex)
+- [x] **Photo blanks** for the T-shirt (front, back) and hoodie (front), from the purchased S.i. Graphics PSDs — `build/blanks/psd_blanks.py`
+- [ ] Photo blanks for the other garments, and a real photographed back — `ASSETS.md` §3
 - [ ] **Original job photos + client permission** — `ASSETS.md` §5 (Eminence)
-- [ ] **Real prices** — `site/studio/js/pricing.js` (Eminence)
+- [x] Owner price settings — `/studio/admin/`, saved through `/api/pricing`
+- [ ] **Eminence's own prices** entered and saved there (Eminence)
 - [ ] Email on the domain, Resend, R2 — `ops/DEPLOY.md`
 
 ## Questions for Eminence
@@ -139,9 +141,90 @@ From `build/content.mjs` → `CLIENT_TO_CONFIRM`:
 1. Street address and trading hours (neither is published anywhere).
 2. Year founded — their 2023 post says *"15 years and counting"*.
 3. Do they offer **DTF** and **cut vinyl** on garments? The Studio assumes yes.
-4. Their prices, so the Studio can say *Price* instead of *Estimate*.
+4. Their prices — entered by them at `/studio/admin/`.
 5. Delivery area and minimum quantities.
 6. Permission from Khula Med, Stop & Buy, Ant Ranch and Pbtoz to show their jobs.
+
+## Mockups, print sizes, fonts and prices
+
+**Mockups the Printful way.** Printful's mockups are photographs of real
+garments with the design warped into the folds, not live 3D. The T-shirt and
+hoodie now use the photographed S.i. Graphics templates the owner bought:
+`build/blanks/psd_blanks.py` rebuilds a white garment from the PSD's own mask,
+shadow and highlight layers, and `photo.js` recolours it to any colour and lays
+the print under the folds. Provenance and licence: `site/studio/blanks/PROVENANCE.md`.
+The other garments use the drawn SVGs until they have photos.
+
+All four garments now share ONE photograph's light and cloth, the way a
+Printful catalogue looks consistent: the **oversized tee** is the T-shirt photo
+reshaped boxy, and the **golf shirt** is the T-shirt photo with a collar, stand,
+placket and buttons built from its own fabric (`polo()` in `psd_blanks.py`).
+The hoodie is its own photo. A real photographed golf shirt would still be better.
+
+**Business and welcome cards, designed whole.** Pick a layout (5 business
+card, 2 welcome card), type *Your details* once — name, title, phone, email,
+website… or heading, message, Wi-Fi, password — and the front and back fill in,
+inside the safe line with the background to the bleed. Then edit freely: new
+**shape** layers (backgrounds, bands, circles, rounded boxes) and **QR codes**
+(vector, from the website or a WhatsApp link, with a scan-size check), a brand
+colour that recolours the whole card, rounded corners. The preview is a card
+stack on a desk, front and back, with the finish (gloss / matt / soft-touch).
+Checks warn while example details are still on the card. **Welcome cards** are a
+new product: A6, DL, A5, square or mini, 25 – 1 000, priced at `/studio/admin/`.
+
+**Print sizes.** Every design shows its real size in cm, the A-size it matches
+(A7 – A0) and its DPI at that size, with one-click A6 · A5 · A4 · A3 · A2 buttons
+that only offer sizes the print area can take. The print area says the biggest
+A-size it holds; the proof sheet lists each print's A-size.
+
+**Editing on the garment colour.** A colour strip on the edit canvas, and the
+backdrop takes the garment colour, so a design for a black shirt is made on black.
+
+**Fonts.** 27 Google Fonts in four groups — Clean, Streetwear (stencil,
+blackletter, neon…), Graffiti (spray paint, drip, tag, marker…) and Script.
+
+**Prices — `/studio/admin/`.** Every number the Studio charges, in print-shop
+words: blanks, DTF/sublimation by A-size, screens per colour, embroidery,
+bulk discounts, paper tiers, per m², fixed items, installed ranges, VAT — with
+a live example quote. Saved with `STUDIO_ADMIN_PASSWORD` to the storage bucket;
+the Studio loads it on start. Customers see a price, never an "estimate".
+
+## Display products: colours, settings and turning
+
+- **Gazebo** — true 3D: drag round it a full 360°, drag up to look down on the
+  roof (0–70°), scroll / pinch / ± to zoom, **↻ 360°** for a full turn. Canopy
+  colour, a separate **frame colour** (silver, black, white), the pop-up frame's
+  scissor truss and foot plates, **back and side walls** (each priced), and a
+  setting to stand it in — **studio, grass or paving** — drawn in the same 3D.
+- **Teardrop flag, pull-up, correx board** — drag to turn them on their stand;
+  past 90° you see the back (a flag's print shows through mirrored; a pull-up
+  shows its grey back and pole). The PVC banner is tied to a fence, so it stays.
+- **Printed background colour** for gazebo, flag, pull-up, PVC and correx: the
+  colour is printed edge to edge behind the design, shown in the editor, and
+  written into the print-ready PNG.
+- **Mug** — drag to turn, now with zoom.
+
+## Orders: print files and customer folders
+
+Every order now carries a **print-ready PNG per printed side**
+(`site/studio/js/printfile.js`): the whole design at its true size (bleed
+included on paper and banners), 300 dpi — or the product's own minimum for large
+format, capped near 50 megapixels — with a transparent background and the DPI
+written into the file, so it opens at the right physical size. Names say what
+they are: `EP-261105-EAM-back-300x400mm-300dpi.png`.
+
+Storage is filed **by customer**, WhatsApp number + name:
+
+```
+customers/27825550101-sipho-dlamini/customer.json        ← who, and every order they've sent
+customers/27825550101-sipho-dlamini/EP-261105-EAM-<random>/
+    print/      the print-ready PNGs
+    artwork/    the customer's original uploads
+    proof/      the proof sheet
+    spec.json   sizes, placements, inks, the quote, the print files
+```
+
+The email to the shop lists the print files first, with 7-day links.
 
 ## Known gaps
 

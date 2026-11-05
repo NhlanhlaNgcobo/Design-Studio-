@@ -29,36 +29,69 @@ const svg = (w, h, body, defs = "") =>
        </filter>
      </defs>${body}</svg>`;
 
+/* Turning a flat product on its stand: the product group is scaled about its
+ * own vertical axis by cos(yaw), which is how a flat panel looks as it turns.
+ * Past 90° you see the back: mirrored print on a flag (the dye goes through),
+ * the plain back of a pull-up or a board. The scenery stays put. */
+function turn(yaw = 0) {
+  const c = Math.cos((yaw * Math.PI) / 180);
+  const sx = Math.sign(c || 1) * Math.max(0.03, Math.abs(c));
+  return { sx, back: sx < 0, edge: (1 - Math.abs(sx)) * 0.32 };
+}
+const turned = (ax, sx, body) => `<g transform="translate(${ax} 0) scale(${sx.toFixed(4)} 1) translate(${-ax} 0)">${body}</g>`;
+
 /* ─────────────────────────── paper ─────────────────────────── */
 
-export function paperSvg({ product, size, tex, active }) {
-  if (product.kind === "card") return cards(size, tex, active);
+export function paperSvg({ product, size, tex, active, options, stock }) {
+  if (product.kind === "card") return cards(size, tex, active, options, stock);
   if (product.kind === "poster") return poster(size, tex, active);
   return sheet(size, tex, active);
 }
 
-/** Two cards on a desk, the side being edited on top. */
-function cards(size, tex, active) {
-  const W = 1000, H = 760, k = 5.6;
+/**
+ * Cards on a desk, as a print shop photographs them: the side being edited on
+ * top of a short stack (you see the board's edge), the other side on a second
+ * card beside it. Rounded corners, and the finish — gloss throws a highlight,
+ * soft-touch is velvet-flat, matt in between — follow the order options.
+ * Portrait sizes (welcome cards) stand side by side; landscape ones overlap.
+ */
+function cards(size, tex, active, options = {}, stock = "") {
+  const W = 1000, H = 760;
+  const portrait = size.h > size.w;
+  const k = portrait ? Math.min(330 / size.w, 560 / size.h) : Math.min(480 / size.w, 300 / size.h);
   const cw = size.w * k, ch = size.h * k;
-  const card = (side, x, y, rot, top) => `
+  const rx = options.rounded ? 3 * k : 1.2;
+  const finish = /gloss/i.test(stock) ? "gloss" : /soft/i.test(stock) ? "soft" : "matt";
+  const sheen = { gloss: 0.42, matt: 0.14, soft: 0.05 }[finish];
+  const card = (side, x, y, rot, top, stack) => `
     <g transform="translate(${x} ${y}) rotate(${rot})">
-      <rect x="${-cw / 2 + 6}" y="${-ch / 2 + 14}" width="${cw}" height="${ch}" fill="#000" opacity=".22" filter="url(#soft)"/>
-      <rect x="${-cw / 2}" y="${-ch / 2 + 3}" width="${cw}" height="${ch}" fill="#D9D5CC"/>
-      <rect x="${-cw / 2}" y="${-ch / 2}" width="${cw}" height="${ch}" fill="#FFFFFF"/>
-      ${img(tex[side], -cw / 2, -ch / 2, cw, ch)}
-      <rect x="${-cw / 2}" y="${-ch / 2}" width="${cw}" height="${ch}" filter="url(#paper)" opacity=".7"/>
-      <rect x="${-cw / 2}" y="${-ch / 2}" width="${cw}" height="${ch}" fill="url(#cardlight)"/>
-      ${outline(top && active === side, -cw / 2, -ch / 2, cw, ch)}
+      <rect x="${-cw / 2 + 8}" y="${-ch / 2 + 18}" width="${cw}" height="${ch}" rx="${rx}" fill="#000" opacity=".28" filter="url(#soft)"/>
+      ${Array.from({ length: stack }, (_, i) => `<rect x="${-cw / 2 + (stack - i) * 0.6}" y="${-ch / 2 + (stack - i) * 2.2}" width="${cw}" height="${ch}" rx="${rx}" fill="${i % 2 ? "#E4E0D8" : "#D6D1C6"}"/>`).join("")}
+      <clipPath id="cc-${side}"><rect x="${-cw / 2}" y="${-ch / 2}" width="${cw}" height="${ch}" rx="${rx}"/></clipPath>
+      <g clip-path="url(#cc-${side})">
+        <rect x="${-cw / 2}" y="${-ch / 2}" width="${cw}" height="${ch}" fill="#FFFFFF"/>
+        ${img(tex[side], -cw / 2, -ch / 2, cw, ch)}
+        <rect x="${-cw / 2}" y="${-ch / 2}" width="${cw}" height="${ch}" filter="url(#paper)" opacity="${finish === "soft" ? 0.4 : 0.65}"/>
+        <rect x="${-cw / 2}" y="${-ch / 2}" width="${cw}" height="${ch}" fill="url(#cardlight)"/>
+        <rect x="${-cw / 2}" y="${-ch / 2}" width="${cw}" height="${ch}" fill="url(#sheen)" opacity="${sheen}"/>
+      </g>
+      <rect x="${-cw / 2 + 0.5}" y="${-ch / 2 + 0.5}" width="${cw - 1}" height="${ch - 1}" rx="${rx}" fill="none" stroke="#fff" stroke-opacity=".5"/>
+      ${outline(top && active === side, -cw / 2, -ch / 2, cw, ch, `rx="${rx}"`)}
     </g>`;
   const frontOnTop = active !== "back";
   const under = frontOnTop ? "back" : "front", over = frontOnTop ? "front" : "back";
+  const hasUnder = !!tex[under];
+  const scene = portrait
+    ? `${hasUnder ? card(under, 300, 390, -5, false, 1) : ""}${card(over, hasUnder ? 650 : 500, 380, 3, true, 6)}`
+    : `${hasUnder ? card(under, 400, 300, -10, false, 1) : ""}${card(over, hasUnder ? 580 : 500, hasUnder ? 450 : 380, 4, true, 6)}`;
   return svg(W, H, `
     <rect width="${W}" height="${H}" fill="url(#desk)"/>
-    ${card(under, 430, 330, -9, false)}
-    ${card(over, 560, 450, 4, true)}`,
-    `<linearGradient id="desk" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#EDEAE3"/><stop offset="1" stop-color="#DCD7CD"/></linearGradient>
-     <linearGradient id="cardlight" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".18"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".06"/></linearGradient>`);
+    <rect width="${W}" height="${H}" filter="url(#paper)" opacity=".35"/>
+    <ellipse cx="${W * 0.3}" cy="${H * 0.15}" rx="${W * 0.6}" ry="${H * 0.45}" fill="#fff" opacity=".35" filter="url(#soft)"/>
+    ${scene}`,
+    `<linearGradient id="desk" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#EEEBE4"/><stop offset="1" stop-color="#D5CFC3"/></linearGradient>
+     <linearGradient id="cardlight" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".16"/><stop offset=".55" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".08"/></linearGradient>
+     <linearGradient id="sheen" x1="0" y1="0" x2="1" y2=".6"><stop offset=".25" stop-color="#fff" stop-opacity="0"/><stop offset=".42" stop-color="#fff" stop-opacity=".9"/><stop offset=".5" stop-color="#fff" stop-opacity=".15"/><stop offset=".62" stop-color="#fff" stop-opacity="0"/></linearGradient>`);
 }
 
 /** A flyer lying on a desk, slightly turned. */
@@ -112,38 +145,45 @@ function poster(size, tex, active) {
 
 /* ─────────────────────────── banners & boards ─────────────────────────── */
 
-export function bannerSvg({ product, size, tex, active }) {
-  if (product.kind === "rollup") return rollup(size, tex.face, active);
-  if (product.kind === "board") return board(size, tex.face, active);
-  return pvc(size, tex.face, active);
+export function bannerSvg({ product, size, tex, active, colour = "#FFFFFF", yaw = 0 }) {
+  if (product.kind === "rollup") return rollup(size, tex.face, active, colour, yaw);
+  if (product.kind === "board") return board(size, tex.face, active, colour, yaw);
+  return pvc(size, tex.face, active, colour);
 }
 
 /** A pull-up on its cassette. The bottom 100 mm of artwork is inside the base. */
-function rollup(size, tex, active) {
+function rollup(size, tex, active, colour, yaw) {
   const W = 1000, H = 1000;
   const k = 860 / 2150;
   const bw = size.w * k, bh = size.h * k;
   const x = 500 - bw / 2, y = 910 - bh;
   const hidden = 100 * k;
+  const t = turn(yaw);
+  const face = t.back
+    ? `<rect x="${x}" y="${y}" width="${bw}" height="${bh}" fill="#D9DCE0"/>
+       <rect x="${500 - 4}" y="${y}" width="8" height="${bh - hidden}" fill="#9AA0A7"/>`
+    : `<rect x="${x}" y="${y}" width="${bw}" height="${bh}" fill="${colour}"/>
+       <svg x="${x}" y="${y}" width="${bw}" height="${bh - hidden}" viewBox="0 0 ${bw} ${bh - hidden}" preserveAspectRatio="xMidYMin slice">
+         ${img(tex, 0, 0, bw, bh)}
+       </svg>`;
   return svg(W, H, `
     <rect width="${W}" height="${H}" fill="url(#floor)"/>
-    <ellipse cx="500" cy="944" rx="${bw * 0.7}" ry="16" fill="#000" opacity=".28" filter="url(#soft)"/>
-    <rect x="${x}" y="${y}" width="${bw}" height="${bh}" fill="#fff"/>
-    <svg x="${x}" y="${y}" width="${bw}" height="${bh - hidden}" viewBox="0 0 ${bw} ${bh - hidden}" preserveAspectRatio="xMidYMin slice">
-      ${img(tex, 0, 0, bw, bh)}
-    </svg>
-    <rect x="${x}" y="${y}" width="${bw}" height="${bh}" fill="url(#sheen)"/>
-    <rect x="${x - 4}" y="${y - 8}" width="${bw + 8}" height="10" rx="3" fill="#B9BDC2"/>
-    <rect x="${x - 24}" y="${910 - hidden}" width="${bw + 48}" height="${hidden + 22}" rx="10" fill="url(#cassette)"/>
-    <rect x="${x - 30}" y="${928}" width="18" height="10" rx="3" fill="#7D838B"/><rect x="${x + bw + 12}" y="${928}" width="18" height="10" rx="3" fill="#7D838B"/>
-    ${outline(active, x, y, bw, bh - hidden)}`,
+    <ellipse cx="500" cy="944" rx="${bw * 0.7 * Math.max(0.35, Math.abs(t.sx))}" ry="16" fill="#000" opacity=".28" filter="url(#soft)"/>
+    ${turned(500, t.sx, `
+      ${face}
+      <rect x="${x}" y="${y}" width="${bw}" height="${bh}" fill="url(#sheen)"/>
+      <rect x="${x}" y="${y}" width="${bw}" height="${bh}" fill="#000" opacity="${t.edge.toFixed(3)}"/>
+      <rect x="${x - 4}" y="${y - 8}" width="${bw + 8}" height="10" rx="3" fill="#B9BDC2"/>
+      <rect x="${x - 24}" y="${910 - hidden}" width="${bw + 48}" height="${hidden + 22}" rx="10" fill="url(#cassette)"/>
+      <rect x="${x - 30}" y="${928}" width="18" height="10" rx="3" fill="#7D838B"/><rect x="${x + bw + 12}" y="${928}" width="18" height="10" rx="3" fill="#7D838B"/>
+      ${t.back ? "" : outline(active, x, y, bw, bh - hidden)}`)}`,
     `<linearGradient id="floor" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F1EEE8"/><stop offset=".9" stop-color="#E3DED4"/><stop offset="1" stop-color="#D6D0C4"/></linearGradient>
      <linearGradient id="cassette" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#E4E6E9"/><stop offset=".5" stop-color="#A9AEB4"/><stop offset="1" stop-color="#7D838B"/></linearGradient>
      <linearGradient id="sheen" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".08"/><stop offset=".35" stop-color="#fff" stop-opacity=".08"/><stop offset="1" stop-color="#000" stop-opacity=".1"/></linearGradient>`);
 }
 
 /** A PVC banner cable-tied to a palisade fence. Eyelets every ~500 mm, as hemmed. */
-function pvc(size, tex, active) {
+function pvc(size, tex, active, colour = "#FFFFFF") {
   const W = 1000, H = 760;
   const k = Math.min(880 / size.w, 440 / size.h);
   const bw = size.w * k, bh = size.h * k;
@@ -160,7 +200,7 @@ function pvc(size, tex, active) {
     <rect y="120" width="${W}" height="12" fill="#2F343B"/><rect y="560" width="${W}" height="12" fill="#2F343B"/>
     <g filter="url(#wave)">
       <rect x="${x + 6}" y="${y + 14}" width="${bw}" height="${bh}" fill="#000" opacity=".28" filter="url(#soft)"/>
-      <rect x="${x}" y="${y}" width="${bw}" height="${bh}" fill="#fff"/>
+      <rect x="${x}" y="${y}" width="${bw}" height="${bh}" fill="${colour}"/>
       ${img(tex, x, y, bw, bh)}
       <rect x="${x}" y="${y}" width="${bw}" height="${bh}" fill="url(#vinyl)"/>
     </g>
@@ -173,7 +213,8 @@ function pvc(size, tex, active) {
 }
 
 /** A correx board on two wire stakes, in grass. Flutes run horizontally. */
-function board(size, tex, active) {
+function board(size, tex, active, colour = "#FFFFFF", yaw = 0) {
+  const t = turn(yaw);
   const W = 1000, H = 900;
   const k = Math.min(760 / size.w, 560 / size.h);
   const bw = size.w * k, bh = size.h * k;
@@ -183,15 +224,17 @@ function board(size, tex, active) {
   return svg(W, H, `
     <rect width="${W}" height="${H}" fill="url(#sky)"/>
     <path d="M 0 ${H - 200} Q 500 ${H - 240} ${W} ${H - 200} L ${W} ${H} L 0 ${H} Z" fill="#7F9A5A"/>
+    ${turned(500, t.sx, `
     <path d="M ${x + bw * 0.22} ${y + bh} L ${x + bw * 0.22} ${H - 150}" stroke="#7D838B" stroke-width="5"/>
     <path d="M ${x + bw * 0.78} ${y + bh} L ${x + bw * 0.78} ${H - 150}" stroke="#7D838B" stroke-width="5"/>
     <rect x="${x + 8}" y="${y + 14}" width="${bw}" height="${bh}" fill="#000" opacity=".25" filter="url(#soft)"/>
-    <rect x="${x}" y="${y}" width="${bw}" height="${bh}" fill="#fff"/>
-    ${img(tex, x, y, bw, bh)}
+    <rect x="${x}" y="${y}" width="${bw}" height="${bh}" fill="${t.back ? "#F1F1EE" : colour}"/>
+    ${t.back ? "" : img(tex, x, y, bw, bh)}
     ${flutes.join("")}
     <rect x="${x}" y="${y}" width="${bw}" height="${bh}" fill="url(#plastic)"/>
+    <rect x="${x}" y="${y}" width="${bw}" height="${bh}" fill="#000" opacity="${t.edge.toFixed(3)}"/>
     <rect x="${x}" y="${y}" width="${bw}" height="${bh}" fill="none" stroke="#000" stroke-opacity=".15" stroke-width="2"/>
-    ${outline(active, x, y, bw, bh)}`,
+    ${t.back ? "" : outline(active, x, y, bw, bh)}`)}`,
     `<linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#CFE3F1"/><stop offset="1" stop-color="#EEF3F5"/></linearGradient>
      <linearGradient id="plastic" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".16"/><stop offset=".4" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".08"/></linearGradient>`);
 }
@@ -205,7 +248,8 @@ export function teardropPath(x0, y0, w, h) {
     C ${x0 + w * 1.02} ${y0 + h * 0.55}, ${x0 + w * 0.55} ${y0 + h * 0.82}, ${x0} ${y0 + h} Z`;
 }
 
-export function flagSvg({ size, tex, active }) {
+export function flagSvg({ size, tex, active, colour = "#FFFFFF", yaw = 0 }) {
+  const t = turn(yaw);
   const W = 1000, H = 1000;
   const k = 760 / 2900;
   const fw = size.w * k, fh = size.h * k;
@@ -215,24 +259,29 @@ export function flagSvg({ size, tex, active }) {
   return svg(W, H, `
     <rect width="${W}" height="${H}" fill="url(#sky)"/>
     <path d="M 0 860 Q 500 820 ${W} 860 L ${W} ${H} L 0 ${H} Z" fill="#7F9A5A"/>
-    <ellipse cx="${x0 + fw * 0.4}" cy="905" rx="${fw * 0.6}" ry="12" fill="#000" opacity=".18" filter="url(#soft)"/>
+    <ellipse cx="${x0 + fw * 0.4 * t.sx}" cy="905" rx="${fw * 0.6 * Math.max(0.3, Math.abs(t.sx))}" ry="12" fill="#000" opacity=".18" filter="url(#soft)"/>
+    ${turned(x0 - 2, t.sx, `
     <path d="M ${x0 - 2} ${y0 + fh} L ${x0 - 2} 900" stroke="#5E646C" stroke-width="7"/>
     <g filter="url(#flutter)">
-      <path d="${d}" fill="#fff"/>
+      <path d="${d}" fill="${colour}"/>
       <g clip-path="url(#fclip)">
-        ${img(tex, x0, y0, fw, fh)}
-        <rect x="${x0}" y="${y0}" width="${fw}" height="${fh}" fill="url(#folds)" style="mix-blend-mode:multiply"/>
+        ${img(tex, x0, y0, fw, fh, t.back ? 'opacity=".8"' : "")}
+        <rect x="${x0}" y="${y0}" width="${fw}" height="${fh}" fill="url(#folds)"/>
+        <rect x="${x0}" y="${y0}" width="${fw}" height="${fh}" fill="#000" opacity="${t.edge.toFixed(3)}"/>
       </g>
     </g>
     <path d="M ${x0 - 2} ${y0 + fh} L ${x0 - 2} ${poleTop} C ${x0 + fw * 0.15} ${y0 - fh * 0.01}, ${x0 + fw * 0.95} ${y0 + fh * 0.02}, ${x0 + fw} ${y0 + fh * 0.3}"
           fill="none" stroke="#3B4048" stroke-width="6" stroke-linecap="round"/>
     <path d="M ${x0 - 14} 900 L ${x0 + 10} 900 L ${x0 - 2} 930 Z" fill="#3B4048"/>
-    ${active ? `<path class="ui-only" d="${d}" fill="none" stroke="#E5007E" stroke-width="3" stroke-dasharray="12 9"/>` : ""}`,
+    ${active && !t.back ? `<path class="ui-only" d="${d}" fill="none" stroke="#E5007E" stroke-width="3" stroke-dasharray="12 9"/>` : ""}`)}`,
     `<clipPath id="fclip"><path d="${d}"/></clipPath>
      <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#CFE3F1"/><stop offset="1" stop-color="#EEF3F5"/></linearGradient>
+     <!-- Folds as transparent shadow, not a multiply blend: blend modes are dropped
+          inside the flutter filter in some browsers, which painted the folds white
+          over any flag colour. -->
      <linearGradient id="folds" x1="0" y1="0" x2="1" y2=".25">
-       <stop offset="0" stop-color="#fff"/><stop offset=".22" stop-color="#d8d8d8"/><stop offset=".38" stop-color="#fff"/>
-       <stop offset=".58" stop-color="#cfcfcf"/><stop offset=".76" stop-color="#fff"/><stop offset="1" stop-color="#d6d6d6"/></linearGradient>
+       <stop offset="0" stop-color="#000" stop-opacity="0"/><stop offset=".22" stop-color="#000" stop-opacity=".15"/><stop offset=".38" stop-color="#000" stop-opacity="0"/>
+       <stop offset=".58" stop-color="#000" stop-opacity=".19"/><stop offset=".76" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".16"/></linearGradient>
      <filter id="flutter"><feTurbulence type="fractalNoise" baseFrequency=".004 .012" numOctaves="1" seed="3" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="10" xChannelSelector="R" yChannelSelector="G"/></filter>`);
 }
 

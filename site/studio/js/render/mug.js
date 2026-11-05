@@ -12,7 +12,7 @@ import { shade } from "./garment.js";
 const D_MM = 82, H_MM = 95, PRINT_H = 82;
 const CIRC = Math.PI * D_MM;
 
-export function drawMug(canvas, { colour, texCanvas, yaw = 28, active, printW = 200 }, opts = {}) {
+export function drawMug(canvas, { colour = "#FFFFFF", inside: insideColour = "#FFFFFF", handle: handleColour = "#FFFFFF", texCanvas, yaw = 28, zoom = 1, active, printW = 200 }, opts = {}) {
   // An explicit w/h is an offscreen export (the proof); otherwise fill the element.
   const dpr = opts.w ? 1 : Math.min(2, devicePixelRatio || 1);
   const cw = opts.w || canvas.clientWidth || 600, ch = opts.h || canvas.clientHeight || 600;
@@ -21,11 +21,14 @@ export function drawMug(canvas, { colour, texCanvas, yaw = 28, active, printW = 
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
   g.clearRect(0, 0, cw, ch);
 
-  const s = Math.min(cw / (D_MM * 1.9), ch / (H_MM * 1.45));
+  const s = Math.min(cw / (D_MM * 1.9), ch / (H_MM * 1.45)) * Math.max(0.6, Math.min(2.4, zoom));
   const R = (D_MM / 2) * s, H = H_MM * s;
   const cx = cw / 2 - R * 0.08, top = ch / 2 - H / 2 - R * 0.06;
   const ry = R * 0.2;                                   // rim ellipse: we look slightly down
-  const glaze = colour === "#FFFFFF" ? "#F4F4F2" : colour;
+  // Three glazes: outside (the whole body and rim), inside, handle. White
+  // glaze sits a shade off pure white so it reads as ceramic.
+  const tone = (c) => (c.toUpperCase() === "#FFFFFF" ? "#F4F4F2" : c);
+  const glaze = tone(insideColour), handleGlaze = tone(handleColour), outside = tone(colour);
   const ya = (yaw * Math.PI) / 180;
 
   // Handle angle on screen; the handle sits opposite the print centre.
@@ -41,7 +44,7 @@ export function drawMug(canvas, { colour, texCanvas, yaw = 28, active, printW = 
   g.beginPath(); g.ellipse(cx + R * 0.1, top + H + ry * 0.4, R * 1.15, ry * 1.1, 0, 0, Math.PI * 2); g.fill();
   g.restore();
 
-  if (!handleFront) handle(g, hx, top, H, R, th, colour, glaze, true);
+  if (!handleFront) handle(g, hx, top, H, R, th, handleGlaze, true);
 
   // body
   g.save();
@@ -51,7 +54,7 @@ export function drawMug(canvas, { colour, texCanvas, yaw = 28, active, printW = 
   g.lineTo(cx + R, top);
   g.ellipse(cx, top, R, ry, 0, 0, Math.PI, false);
   g.closePath();
-  g.fillStyle = "#FBFBFA"; g.fill();
+  g.fillStyle = outside; g.fill();
   g.clip();
 
   // the wrap, column by column
@@ -86,7 +89,7 @@ export function drawMug(canvas, { colour, texCanvas, yaw = 28, active, printW = 
 
   // rim and inside
   g.beginPath(); g.ellipse(cx, top, R, ry, 0, 0, Math.PI * 2);
-  g.fillStyle = shade(glaze, 0.92); g.fill();
+  g.fillStyle = shade(outside, 0.92); g.fill();          // the lip is the outside glaze
   g.beginPath(); g.ellipse(cx, top + ry * 0.1, R * 0.93, ry * 0.86, 0, 0, Math.PI * 2);
   const inside = g.createLinearGradient(0, top - ry, 0, top + ry);
   inside.addColorStop(0, shade(glaze, 0.62)); inside.addColorStop(1, shade(glaze, 0.9));
@@ -94,7 +97,7 @@ export function drawMug(canvas, { colour, texCanvas, yaw = 28, active, printW = 
   g.strokeStyle = "rgba(0,0,0,.18)"; g.lineWidth = 1.2;
   g.beginPath(); g.ellipse(cx, top, R, ry, 0, 0, Math.PI * 2); g.stroke();
 
-  if (handleFront) handle(g, hx, top, H, R, th, colour, glaze, false);
+  if (handleFront) handle(g, hx, top, H, R, th, handleGlaze, false);
 
   // print-band guide while editing
   if (active) {
@@ -106,11 +109,10 @@ export function drawMug(canvas, { colour, texCanvas, yaw = 28, active, printW = 
   }
 }
 
-function handle(g, hx, top, H, R, th, colour, glaze, behind) {
+function handle(g, hx, top, H, R, th, body, behind) {
   const out = Math.abs(Math.sin(th));
   const reach = R * 0.95 * out, side = Math.sign(Math.sin(th)) || 1;
   const x0 = hx, y0 = top + H * 0.2, y1 = top + H * 0.78;
-  const body = colour === "#FFFFFF" ? "#F4F4F2" : glaze;
   g.save();
   g.lineCap = "round";
   g.strokeStyle = behind ? shade(body, 0.78) : body;

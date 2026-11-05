@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en-ZA">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Studio prices — Eminence Printing</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="/assets/brand/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&family=JetBrains+Mono:wght@500;700&display=swap">
+<link rel="stylesheet" href="/assets/css/tokens.css">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.5 var(--f-sans); }
+  header { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 14px 24px; background: var(--card); border-bottom: 1px solid var(--line); }
+  header h1 { margin: 0; font-size: 1.05rem; }
+  header .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  main { max-width: 1080px; margin: 0 auto; padding: 24px 16px 80px; display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: start; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } aside { position: static !important; } }
+  .status { padding: 12px 16px; border-radius: 10px; margin-bottom: 18px; font-size: .9rem; }
+  .status.starter { background: var(--warn-bg); color: var(--warn); }
+  .status.saved { background: var(--ok-bg); color: var(--ok); }
+  .status.err { background: var(--bad-bg); color: var(--bad); }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; margin-bottom: 16px; }
+  section h2 { margin: 0 0 4px; font-size: 1rem; }
+  section p.help { margin: 0 0 12px; color: var(--muted); font-size: .85rem; }
+  .rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px 16px; }
+  label.f { display: flex; flex-direction: column; gap: 4px; font-size: .82rem; font-weight: 600; }
+  .in { display: flex; align-items: center; border: 1px solid var(--line-2); border-radius: 8px; background: #fff; overflow: hidden; }
+  .in:focus-within { outline: 2px solid var(--cyan-ink); outline-offset: 1px; }
+  .in span { padding: 0 9px; color: var(--muted); font: 500 .8rem var(--f-mono); }
+  .in input { flex: 1; min-width: 0; border: 0; padding: 8px 9px; font: 600 .92rem var(--f-mono); background: transparent; }
+  table { width: 100%; border-collapse: collapse; font-size: .86rem; }
+  th { text-align: left; font-size: .74rem; color: var(--muted); font-weight: 600; padding: 4px 6px; }
+  td { padding: 4px 6px; }
+  .btn { border: 1px solid var(--ink); background: var(--ink); color: #fff; border-radius: 8px; padding: 9px 16px; font: 700 .88rem var(--f-sans); cursor: pointer; }
+  .btn.ghost { background: transparent; color: var(--ink); }
+  .btn:disabled { opacity: .5; cursor: wait; }
+  input[type=password] { border: 1px solid var(--line-2); border-radius: 8px; padding: 8px 10px; font: inherit; width: 190px; }
+  aside { position: sticky; top: 84px; }
+  aside section { margin: 0; }
+  .ex { font-size: .84rem; }
+  .ex select, .ex input { width: 100%; margin: 4px 0 10px; padding: 7px; border: 1px solid var(--line-2); border-radius: 8px; font: inherit; }
+  .ex .line { display: flex; justify-content: space-between; gap: 8px; font: 500 .8rem var(--f-mono); padding: 2px 0; }
+  .ex .tot { display: flex; justify-content: space-between; font-weight: 800; font-size: 1.1rem; border-top: 1px solid var(--line); margin-top: 8px; padding-top: 8px; }
+  a { color: var(--cyan-ink); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Studio prices <span style="color:var(--muted);font-weight:500">— what customers are charged in the Design Studio</span></h1>
+  <div class="actions">
+    <input type="password" id="password" placeholder="Admin password" autocomplete="current-password" aria-label="Admin password">
+    <button class="btn ghost" id="reset">Starter prices</button>
+    <button class="btn" id="save">Save prices</button>
+  </div>
+</header>
+<main>
+  <div>
+    <div class="status starter" id="status" role="status">Loading…</div>
+    <form id="form" onsubmit="return false"></form>
+  </div>
+  <aside>
+    <section class="ex" aria-labelledby="exh">
+      <h2 id="exh">Try a price</h2>
+      <p class="help">Updates as you type, with the same engine the Studio uses.</p>
+      <label>Product<select id="exProduct"></select></label>
+      <label>Process<select id="exProcess"></select></label>
+      <label>Quantity<input type="number" id="exQty" min="1" value="20"></label>
+      <label>Print size (garments)<select id="exBand"></select></label>
+      <div id="exOut"></div>
+      <p class="help" style="margin-top:12px"><a href="/studio/">Open the Studio ↗</a></p>
+    </section>
+  </aside>
+</main>
+<script type="module" src="./admin.js"></script>
+</body>
+</html>

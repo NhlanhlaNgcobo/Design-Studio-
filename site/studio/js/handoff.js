@@ -30,12 +30,13 @@ export function orderMessage({ spec, quoteText, customer, proofUrl, attached }) 
     `${spec.quantity} × ${spec.product_name}, ${spec.colour}, ${spec.process}`,
     spec.size_breakdown ? `Sizes: ${Object.entries(spec.size_breakdown).filter(([, n]) => +n > 0).map(([s, n]) => `${s}×${n}`).join(", ")}` : `Size: ${spec.size}`,
     ...spec.surfaces.map((s) => `• ${s.label}: ${s.design_bounds_mm ? `${Math.round(s.design_bounds_mm.width)} × ${Math.round(s.design_bounds_mm.height)} mm` : "design"}`),
-    quoteText ? `Studio estimate: ${quoteText}` : "",
+    quoteText ? `Studio price: ${quoteText}` : "",
     customer?.needBy ? `Needed by: ${customer.needBy}` : "",
     customer?.delivery ? `${customer.delivery}` : "",
     customer?.notes ? `Notes: ${customer.notes}` : "",
     ``,
-    proofUrl ? `Proof: ${proofUrl}` : attached ? `I've saved the proof (${spec.ref}-proof.png) and will send it here now.` : "",
+    spec.print_files?.length ? `Print files: ${spec.print_files.map((f) => `${f.surface} ${f.size_mm[0]}×${f.size_mm[1]} mm @ ${f.dpi} dpi`).join(", ")}` : "",
+    proofUrl ? `Proof: ${proofUrl}` : attached ? `I've saved the proof (${spec.ref}-proof.png) and print files and will send them here now.` : "",
     customer?.name ? `— ${customer.name}` : "",
   ];
   return lines.filter((l, i) => l !== "" || (i > 0 && lines[i - 1] !== "")).join("\n").trim();
@@ -45,12 +46,13 @@ export function orderMessage({ spec, quoteText, customer, proofUrl, attached }) 
  * Upload the job. Resolves { ok:true, proofUrl } or { ok:false, reason }.
  * Never throws: a failed upload must still leave the customer a way to order.
  */
-export async function uploadJob({ spec, proof, specBlob, originals, onProgress = () => {} }) {
+export async function uploadJob({ spec, proof, specBlob, originals, prints = [], onProgress = () => {} }) {
   try {
     const files = [
       { id: "proof", name: `${spec.ref}-proof.png`, type: "image/png", size: proof.size, role: "proof", blob: proof },
       { id: "spec", name: `${spec.ref}-spec.json`, type: "application/json", size: specBlob.size, role: "spec", blob: specBlob },
       ...originals.map((a, i) => ({ id: "art" + i, name: a.name, type: a.type || "application/octet-stream", size: a.size, role: "artwork", blob: a.file })),
+      ...prints.map((f, i) => ({ id: "print" + i, name: f.name, type: "image/png", size: f.blob.size, role: "print", blob: f.blob })),
     ];
     const start = await fetch("/api/job", {
       method: "POST", headers: { "Content-Type": "application/json" },

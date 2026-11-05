@@ -23,8 +23,8 @@ import { send, readJson, limited, signToken, readToken, sniff, ACCEPTS, safeName
 import { storageFromEnv, objectUrl } from "./_lib/s3.js";
 import { sendMail, mailConfigured } from "./_lib/mail.js";
 
-const LIMITS = { artwork: 40 * 1024 * 1024, proof: 12 * 1024 * 1024, spec: 1024 * 1024 };
-const MAX_FILES = 12;
+const LIMITS = { artwork: 40 * 1024 * 1024, print: 120 * 1024 * 1024, proof: 12 * 1024 * 1024, spec: 1024 * 1024 };
+const MAX_FILES = 24;
 const REF = /^EP-\d{6}-[A-Z2-9]{3}$/;
 const WEEK = 7 * 24 * 3600;
 
@@ -53,14 +53,19 @@ async function start(d, req, res, store, secret) {
   const files = Array.isArray(d.files) ? d.files : [];
   if (!files.length || files.length > MAX_FILES) return send(res, 400, { error: "Wrong number of files." });
 
-  // A folder per job with an unguessable suffix: customer artwork is somebody's
+  // Filed by customer — WhatsApp number + name — so every order a customer
+  // ever sends sits together:
+  //   customers/27821234567-sipho-dlamini/customer.json
+  //   customers/27821234567-sipho-dlamini/EP-…-<random>/{print,artwork,proof}/…
+  // The job folder keeps an unguessable suffix: customer artwork is somebody's
   // brand asset, and must not be findable by guessing a job number.
-  const folder = `jobs/${d.ref}-${crypto.randomBytes(9).toString("base64url")}`;
+  const customer = customerId(d.spec?.customer);
+  const folder = `customers/${customer}/${d.ref}-${crypto.randomBytes(9).toString("base64url")}`;
   const uploads = {}, keys = [];
   for (const f of files) {
-    const role = ["artwork", "proof", "spec"].includes(f.role) ? f.role : null;
+    const role = ["artwork", "print", "proof", "spec"].includes(f.role) ? f.role : null;
     const e = ext(f.name);
-    if (!role || !ACCEPTS[e] || !(f.size > 0) || f.size > LIMITS[role])
+    if (!role || !ACCEPTS[e] || (role === "print" && e !== "png") || !(f.size > 0) || f.size > LIMITS[role])
       return send(res, 400, { error: `${clean(f.name, 80)} can't be uploaded (type or size).` });
     if (role === "spec") continue;                       // the server writes the spec itself
     const key = `${folder}/${role}/${String(keys.length).padStart(2, "0")}-${safeName(f.name)}`;
@@ -75,7 +80,7 @@ async function start(d, req, res, store, secret) {
   const put = await fetch(objectUrl(store, specKey, "PUT", 300), { method: "PUT", body: specText, headers: { "Content-Type": "application/json" } });
   if (!put.ok) throw Object.assign(new Error(`spec put ${put.status}`), { status: 502 });
 
-  const token = signToken({ ref: d.ref, folder, keys, specKey }, secret, 3600);
+  const token = signToken({ ref: d.ref, folder, customer, keys, specKey }, secret, 3600);
   return send(res, 200, { uploads, token });
 }
 
@@ -104,11 +109,13 @@ async function complete(d, req, res, store, secret) {
   const c = d.customer || spec.customer || {};
   const proof = checked.find((k) => k.role === "proof");
   const art = checked.filter((k) => k.role === "artwork");
+  const prints = checked.filter((k) => k.role === "print");
+  await recordOrder(store, t, spec);
   const specUrl = objectUrl(store, t.specKey, "GET", WEEK);
   const digits = clean(c.phone, 40).replace(/\D/g, "").replace(/^0/, "27");
   const q = spec.quote || {};
   const rand = (n) => "R" + Number(n).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, " ").replace(/\.00$/, "");
-  const price = q.range_incl_vat ? `${rand(q.range_incl_vat[0])} – ${rand(q.range_incl_vat[1])} indicative` : q.total ? `${rand(q.total)} incl. VAT (Studio estimate)` : "—";
+  const price = q.range_incl_vat ? `${rand(q.range_incl_vat[0])} – ${rand(q.range_incl_vat[1])} indicative` : q.total ? `${rand(q.total)} incl. VAT` : "—";
   const size = (n) => (n < 1048576 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1048576).toFixed(1)} MB`);
 
   const row = (k, v) => v ? `<tr><td style="padding:4px 14px 4px 0;color:#666;vertical-align:top">${k}</td><td>${v}</td></tr>` : "";
@@ -129,11 +136,12 @@ async function complete(d, req, res, store, secret) {
     </table>
     <h3 style="margin:20px 0 6px">Files — links work for 7 days</h3>
     <ul>
+      ${prints.map((k) => `<li><a href="${k.url}"><b>${escHtml(k.name)}</b></a> (${size(k.total)}) — print-ready PNG, true size</li>`).join("")}
       ${art.map((k) => `<li><a href="${k.url}">${escHtml(k.name)}</a> (${size(k.total)}) — customer's original</li>`).join("")}
       ${proof ? `<li><a href="${proof.url}">Proof sheet</a></li>` : ""}
       <li><a href="${specUrl}">Placement spec (JSON, millimetres)</a></li>
     </ul>
-    <p style="color:#666;font-size:12px">Print from the originals, not the proof. The proof shows placement and size only.</p>
+    <p style="color:#666;font-size:12px">Print from the print-ready PNGs (true size, DPI set in the file) or the originals, not the proof. Stored under <code>customers/${escHtml(t.customer)}/</code>.</p>
   </div>`;
 
   await sendMail({ subject: `Studio job ${t.ref} — ${clean(spec.product_name, 60)} × ${spec.quantity} — ${clean(c.name, 60)}`, html,
@@ -141,4 +149,30 @@ async function complete(d, req, res, store, secret) {
     replyTo: c.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email) ? c.email : undefined });
 
   return send(res, 200, { ok: true, proofUrl: proof?.url ?? null });
+}
+
+/** "27821234567-sipho-dlamini": the customer's WhatsApp number (international
+ * form) and name — the identifier the shop already knows them by. */
+export function customerId(c = {}) {
+  const digits = String(c.phone || "").replace(/\D/g, "").replace(/^0/, "27").slice(0, 15) || "no-number";
+  const name = safeName(c.name || "customer").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "customer";
+  return `${digits}-${name}`;
+}
+
+/* One customer.json per customer, listing every order, so the shop can see a
+ * repeat customer's history in one place. Best effort: an order never fails
+ * because this index couldn't be updated. */
+async function recordOrder(store, t, spec) {
+  try {
+    const key = `customers/${t.customer}/customer.json`;
+    const r = await fetch(objectUrl(store, key, "GET", 60));
+    const rec = r.ok ? await r.json() : { id: t.customer, orders: [] };
+    const c = spec.customer || {};
+    Object.assign(rec, { name: clean(c.name, 120), phone: clean(c.phone, 40), email: clean(c.email, 160) || rec.email || null,
+      company: clean(c.company, 120) || rec.company || null, updated: new Date().toISOString() });
+    if (!rec.orders.some((o) => o.ref === t.ref))
+      rec.orders.push({ ref: t.ref, date: new Date().toISOString(), product: clean(spec.product_name, 80), quantity: spec.quantity ?? null,
+        total_incl_vat: spec.quote?.total ?? null, folder: t.folder });
+    await fetch(objectUrl(store, key, "PUT", 60), { method: "PUT", body: JSON.stringify(rec, null, 2), headers: { "Content-Type": "application/json" } });
+  } catch (e) { console.error("customer index", e); }
 }

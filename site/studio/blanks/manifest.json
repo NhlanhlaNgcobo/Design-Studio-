@@ -1,4 +1,116 @@
 {
   "version": 1,
-  "blanks": {}
+  "blanks": {
+    "tee/front": {
+      "src": "tee-front.png",
+      "chestMm": 510,
+      "pxPerMm": 1.692,
+      "areas": {
+        "front": {
+          "cx": 742,
+          "cy": 638
+        },
+        "chest-left": {
+          "cx": 920,
+          "cy": 371
+        },
+        "sleeve-right": {
+          "cx": 165,
+          "cy": 300,
+          "rot": 20
+        }
+      }
+    },
+    "tee/back": {
+      "src": "tee-back.png",
+      "chestMm": 510,
+      "pxPerMm": 1.692,
+      "areas": {
+        "back": {
+          "cx": 757,
+          "cy": 580
+        },
+        "neck": {
+          "cx": 757,
+          "cy": 141
+        }
+      }
+    },
+    "hoodie/front": {
+      "src": "hoodie-front.png",
+      "chestMm": 580,
+      "pxPerMm": 1.224,
+      "areas": {
+        "front": {
+          "cx": 712,
+          "cy": 702
+        },
+        "chest-left": {
+          "cx": 847,
+          "cy": 587
+        }
+      }
+    },
+    "oversized/front": {
+      "src": "oversized-front.png",
+      "chestMm": 600,
+      "pxPerMm": 1.726,
+      "areas": {
+        "front": {
+          "cx": 920,
+          "cy": 668
+        },
+        "chest-left": {
+          "cx": 1118,
+          "cy": 362
+        }
+      }
+    },
+    "oversized/back": {
+      "src": "oversized-back.png",
+      "chestMm": 600,
+      "pxPerMm": 1.726,
+      "areas": {
+        "back": {
+          "cx": 920,
+          "cy": 628
+        },
+        "neck": {
+          "cx": 920,
+          "cy": 136
+        }
+      }
+    },
+    "polo/front": {
+      "src": "polo-front.png",
+      "chestMm": 520,
+      "pxPerMm": 1.66,
+      "areas": {
+        "chest-left": {
+          "cx": 920,
+          "cy": 342
+        },
+        "chest-right": {
+          "cx": 564,
+          "cy": 342
+        },
+        "sleeve-right": {
+          "cx": 165,
+          "cy": 300,
+          "rot": 20
+        }
+      }
+    },
+    "polo/back": {
+      "src": "polo-back.png",
+      "chestMm": 520,
+      "pxPerMm": 1.66,
+      "areas": {
+        "back": {
+          "cx": 757,
+          "cy": 529
+        }
+      }
+    }
+  }
 }

@@ -16,7 +16,7 @@
  * uploads, which travel with the order untouched.
  */
 
-import { PROCESSES, surfaceSize, effectiveDpi, dpiVerdict } from "./products.js";
+import { PROCESSES, surfaceSize, effectiveDpi, dpiVerdict, paperFor } from "./products.js";
 import { layerSize, composeSurface, designBounds } from "./compose.js";
 import { snapshotMockup, viewsWithDesign } from "./render/index.js";
 import { rand, rand2 } from "./pricing.js";
@@ -44,8 +44,10 @@ export function buildSpec(m) {
         const base = {
           kind: l.kind,
           centre_from_top_left_mm: [r1(l.x + area.w / 2), r1(l.y + area.h / 2)],
-          size_mm: [r1(sz.w), r1(sz.h)], rotation_deg: Math.round(l.rot),
+          size_mm: [r1(sz.w), r1(sz.h)], paper_size: paperFor(sz.w, sz.h), rotation_deg: Math.round(l.rot),
         };
+        if (l.kind === "shape") return { ...base, shape: l.radius ? "rounded rectangle" : l.shape, fill: l.fill, corner_radius_mm: l.radius || 0, background: !!l.background };
+        if (l.kind === "qr") return { ...base, qr_data: l.data, colour: l.colour, white_box: !!l.bg };
         if (l.kind === "text") return { ...base, text: l.text, font: l.font, weight: l.weight, italic: l.italic, colour: l.colour, font_size_mm: r1(l.size), outline_mm: l.outline, outline_colour: l.outline ? l.outlineColour : null, arc_deg: l.arc };
         const a = assets.get(l.assetId);
         const dpi = a?.vector ? null : effectiveDpi(a?.natW, sz.w);
@@ -62,8 +64,8 @@ export function buildSpec(m) {
     stock: state.stock ?? null, options: state.options,
     quantity: quote.units, size_breakdown: product.sizeBreakdown ? state.breakdown : null,
     min_dpi: product.minDpi, surfaces,
-    quote: quote.quoteOnly ? { range_incl_vat: quote.range.map(Math.round), confirmed: quote.confirmed }
-      : { lines: quote.lines, subtotal: quote.subtotal, vat: quote.vat, total: quote.total, confirmed: quote.confirmed },
+    quote: quote.quoteOnly ? { range_incl_vat: quote.range.map(Math.round) }
+      : { lines: quote.lines, subtotal: quote.subtotal, vat: quote.vat, total: quote.total },
     customer: m.customer ?? null,
   };
 }
@@ -152,16 +154,19 @@ export async function renderProof(m, dataTex) {
     for (const l of s.layers) {
       y += 30;
       if (y > H - 300) break;
-      const what = l.kind === "text" ? `“${l.text.split("\n")[0].slice(0, 22)}” ${l.font}` : (l.file || "artwork").slice(0, 26);
+      const what = l.kind === "text" ? `“${l.text.split("\n")[0].slice(0, 22)}” ${l.font}`
+        : l.kind === "shape" ? `${l.background ? "background" : l.shape} ${l.fill}`
+        : l.kind === "qr" ? `QR ${l.qr_data}`.slice(0, 26) : (l.file || "artwork").slice(0, 26);
+      const vectorLike = l.kind !== "image";
       g.font = "600 18px Archivo, sans-serif"; g.fillStyle = INK; g.fillText(`${s.label}`, sx, y);
       g.font = "500 16px 'JetBrains Mono', monospace"; g.fillStyle = MUTED;
       g.fillText(`${what}`, sx + 190, y);
       g.textAlign = "right";
-      g.fillText(`${l.size_mm[0]}×${l.size_mm[1]} mm`, sx + sw - 130, y);
-      const ok = l.kind === "text" || l.verdict === "vector" || l.verdict === "sharp";
+      g.fillText(`${l.size_mm[0]}×${l.size_mm[1]} mm${l.paper_size ? ` (${l.paper_size})` : ""}`, sx + sw - 130, y);
+      const ok = vectorLike || l.verdict === "vector" || l.verdict === "sharp";
       const bad = l.verdict === "too low";
       g.fillStyle = bad ? "#B42318" : ok ? "#1D6B4F" : "#8A6100";
-      g.fillText(l.kind === "text" ? "vector" : l.vector ? "vector" : `${l.effective_dpi} dpi`, sx + sw, y);
+      g.fillText(vectorLike || l.vector ? "vector" : `${l.effective_dpi} dpi`, sx + sw, y);
       g.textAlign = "left";
     }
   }
@@ -185,7 +190,7 @@ export async function renderProof(m, dataTex) {
   if (quote.quoteOnly) g.fillText(`${rand(quote.range[0])} – ${rand(quote.range[1])}`, sx, y);
   else g.fillText(rand2(quote.total), sx, y);
   g.font = "500 18px Archivo, sans-serif"; g.fillStyle = MUTED;
-  g.fillText(quote.quoteOnly ? "indicative, incl. VAT — confirmed after we see it" : `incl. VAT · ${rand2(quote.each)} each${quote.confirmed ? "" : " · estimate, confirmed on your quote"}`, sx, y + 30);
+  g.fillText(quote.quoteOnly ? "indicative, incl. VAT — confirmed after we see it" : `incl. VAT · ${rand2(quote.each)} each`, sx, y + 30);
 
   // notes
   const notes = [];

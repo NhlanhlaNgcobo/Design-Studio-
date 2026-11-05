@@ -150,12 +150,13 @@ export class Editor {
 
     // Caption: the real size of what you are designing on.
     g.font = "500 11px 'JetBrains Mono', ui-monospace, monospace";
-    g.fillStyle = "rgba(20,22,26,.6)"; g.textAlign = "center";
+    const dark = this.c.parentElement?.classList.contains("dark");
+    g.fillStyle = dark ? "rgba(255,255,255,.75)" : "rgba(20,22,26,.6)"; g.textAlign = "center";
     const cap = `${Math.round(w)} × ${Math.round(h)} mm print area` + (b ? `  ·  +${b} mm bleed` : "") + (m.area.safe ? `  ·  ${m.area.safe} mm safe` : "");
     g.fillText(cap, ox, this.cssH - 10);
 
     if (!m.layers.length) {
-      g.font = "600 14px Archivo, system-ui, sans-serif"; g.fillStyle = "rgba(20,22,26,.45)";
+      g.font = "600 14px Archivo, system-ui, sans-serif"; g.fillStyle = dark ? "rgba(255,255,255,.6)" : "rgba(20,22,26,.45)";
       g.fillText("Drop your logo here, or add text", ox, oy);
     }
   }
@@ -291,7 +292,7 @@ export class Editor {
       l.x = x; l.y = y;
     } else if (md.kind === "scale") {
       const k = Math.max(0.05, Math.hypot(p.x - l.x, p.y - l.y) / md.d0);
-      if (l.kind === "image") l.w = Math.max(3, md.w0 * k); else l.size = Math.max(2, md.size0 * k);
+      if (l.kind !== "text") l.w = Math.max(3, md.w0 * k); else l.size = Math.max(2, md.size0 * k);
     } else if (md.kind === "rotate") {
       let rot = md.rot0 + ((Math.atan2(p.y - l.y, p.x - l.x) - md.a0) * 180) / Math.PI;
       rot = ((rot + 540) % 360) - 180;
@@ -300,7 +301,7 @@ export class Editor {
     } else if (md.kind === "pinch") {
       const [a, b] = [...this.pointers.values()];
       const k = Math.hypot(a.x - b.x, a.y - b.y) / md.d0;
-      if (l.kind === "image") l.w = Math.max(3, md.w0 * k); else l.size = Math.max(2, md.size0 * k);
+      if (l.kind !== "text") l.w = Math.max(3, md.w0 * k); else l.size = Math.max(2, md.size0 * k);
       l.rot = md.rot0 + ((Math.atan2(b.y - a.y, b.x - a.x) - md.a0) * 180) / Math.PI;
     }
     this.h.onChange(false);
@@ -324,7 +325,7 @@ export class Editor {
     if (!l || !(e.ctrlKey || e.metaKey)) return;
     e.preventDefault();
     const k = Math.exp(-e.deltaY * 0.0025);
-    if (l.kind === "image") l.w = Math.max(3, l.w * k); else l.size = Math.max(2, l.size * k);
+    if (l.kind !== "text") l.w = Math.max(3, l.w * k); else l.size = Math.max(2, l.size * k);
     this.h.onChange(false);
     clearTimeout(this.wheelT); this.wheelT = setTimeout(() => this.h.onChange(true), 300);
     this.request();

@@ -9,16 +9,19 @@
  * history, the draft save and the quote catch up.
  */
 
-import { PRODUCTS, GROUPS, PROCESSES, surfaceSize, effectiveDpi, dpiVerdict, isDark, contrastRatio, luminance } from "./products.js";
-import { quote as priceQuote, rand, rand2, PRICES_CONFIRMED } from "./pricing.js";
+import { PRODUCTS, GROUPS, PROCESSES, PAPER, surfaceSize, effectiveDpi, dpiVerdict, isDark, contrastRatio, luminance, paperFor, largestPaperIn, scaleToPaper } from "./products.js";
+import { quote as priceQuote, rand, rand2, prices, loadPrices } from "./pricing.js";
 import { loadAsset, applyBackgroundRemoval, restoreBackground } from "./artwork.js";
 import { History, uid, FONTS, newTextLayer, carryOver, saveDraft, loadDraft, clearDraft, setDraftScope } from "./doc.js";
-import { layerSize, layerCorners, designBounds, composeSurface, ensureFonts } from "./compose.js";
+import { layerSize, layerCorners, designBounds, composeSurface, ensureFonts, qrModules } from "./compose.js";
 import { Editor } from "./editor.js";
+import { FIELDS, TEMPLATES, buildTemplate, qrData } from "./templates.js";
 import { renderMockup, snapshotMockup, viewFor } from "./render/index.js";
+import { SCENES } from "./render/gazebo.js";
 import { loadManifest } from "./render/photo.js";
 import { buildSpec, renderProof, jobRef, toBlob, download } from "./proof.js";
 import { uploadJob, orderMessage, whatsappUrl } from "./handoff.js";
+import { makePrintFiles } from "./printfile.js";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -64,8 +67,12 @@ function filterProducts() {
 const state = {
   productId: "tee", sizeId: null, colour: null, process: null, stock: null, options: {},
   qty: 1, breakdown: {}, surfaceId: null, selected: null, designs: {},
-  yaw: null, pitch: 18,
+  yaw: null, pitch: 18, zoom: 1, parts: {}, scene: "grass", details: {}, brand: null,
 };
+/* Products you can turn by dragging: true 3D (gazebo, mug), or turned like a
+ * card on its stand (flag, banners, boards). */
+const TURN_BY_RENDER = { gazebo: "orbit", mug: "spin", flag: "card", banner: "card" };
+const TURN = new Proxy({}, { get: (_, r) => (r === "banner" && P().kind === "pvc" ? null : TURN_BY_RENDER[r]) });
 const assets = new Map();
 const history = new History();
 const tex = {}, texCanvas = {};
@@ -86,6 +93,7 @@ function areaOf(s = surf()) {
 /** The colour of the thing being printed on, for the editor and contrast checks. */
 function material() {
   const r = P().render;
+  if (P().printedBase) return state.colour;
   if (["paper", "banner", "flag", "mug"].includes(r)) return "#FFFFFF";
   return state.colour;
 }
@@ -109,7 +117,8 @@ function selectProduct(id, { keepDesign = true } = {}) {
   state.selected = null;
   // Mug: turned so the handle shows on the right and most of the print faces you.
   state.yaw = to.render === "gazebo" ? -32 : to.render === "mug" ? 52 : 0;
-  state.pitch = 18;
+  state.pitch = 18; state.zoom = 1;
+  state.parts = Object.fromEntries((to.parts || []).map((pt) => [pt.id, pt.colours[0].hex]));
   if (to.sizeBreakdown) { if (!Object.keys(state.breakdown).length) state.breakdown = { M: 1 }; }
   else state.qty = to.defaultQty ?? (to.qtyTiers?.[to.group === "Print" ? 1 : 0] ?? 1);
   clearTextures();
@@ -135,6 +144,18 @@ function renderProductPanel() {
   $("#sizes").innerHTML = p.sizes.map((s) => `<button class="chip" role="radio" data-s="${s.id}" aria-checked="${s.id === state.sizeId}">${esc(s.label)}</button>`).join("");
   $("#colours").innerHTML = p.colours.map((c) => `<button class="sw" role="radio" data-c="${c.hex}" aria-checked="${c.hex === state.colour}" aria-label="${esc(c.name)}" title="${esc(c.name)}" style="background:${c.hex}"></button>`).join("");
   $("#colours").closest(".field").hidden = p.colours.length < 2;
+  // The same colours on the editing canvas, so a design for a black shirt is
+  // made on black — no switching to the preview to find out.
+  $("#editColours").innerHTML = $("#colours").innerHTML;
+  renderDetails();
+  // Parts with their own colour: a gazebo's frame, a mug's inside and handle.
+  $("#partFields").innerHTML = (p.parts || []).map((pt) => `
+    <div class="field"><div class="label"><span id="l-part-${pt.id}">${esc(pt.label)}</span> <span class="val">${esc(pt.colours.find((c) => c.hex === state.parts[pt.id])?.name ?? "")}</span></div>
+    <div class="swatches" role="radiogroup" aria-labelledby="l-part-${pt.id}">${pt.colours.map((c) => `<button class="sw" role="radio" data-part="${pt.id}" data-pc="${c.hex}" aria-checked="${c.hex === state.parts[pt.id]}" aria-label="${esc(c.name)}" title="${esc(c.name)}" style="background:${c.hex}"></button>`).join("")}</div></div>`).join("");
+  $("#l-colour").textContent = p.render === "mug" ? "Outside" : p.render === "gazebo" ? "Canopy" : p.printedBase ? "Background colour" : "Colour";
+  $("#editColoursWrap").hidden = p.colours.length < 2;
+  $("#canvasWrap").style.setProperty("--garment", material());
+  $("#canvasWrap").classList.toggle("dark", luminance(material()) < 0.35);
   $("#colourName").textContent = colourName();
 
   $("#stockField").hidden = !p.stocks;
@@ -157,10 +178,109 @@ function renderProcesses() {
 
 $("#products").addEventListener("click", (e) => { const b = e.target.closest("[data-p]"); if (!b) return; if (b.dataset.p !== state.productId) selectProduct(b.dataset.p); $('#catalogDialog').close(); goTab('design'); });
 $("#sizes").addEventListener("click", (e) => { const b = e.target.closest("[data-s]"); if (!b) return; state.sizeId = b.dataset.s; renderProductPanel(); refreshAll(); commit(); });
-$("#colours").addEventListener("click", (e) => { const b = e.target.closest("[data-c]"); if (!b) return; state.colour = b.dataset.c; renderProductPanel(); refreshAll(); commit(); });
+$("#partFields").addEventListener("click", (e) => { const b = e.target.closest("[data-part]"); if (!b) return; state.parts = { ...state.parts, [b.dataset.part]: b.dataset.pc }; renderProductPanel(); updateMockup(); commit(); });
+$("#scenes").addEventListener("click", (e) => { const b = e.target.closest("[data-scene]"); if (!b) return; state.scene = b.dataset.scene; renderSurfaces(); updateMockup(); commit(); });
+for (const id of ["#colours", "#editColours"]) $(id).addEventListener("click", (e) => { const b = e.target.closest("[data-c]"); if (!b) return; state.colour = b.dataset.c; renderProductPanel(); refreshAll(); commit(); });
 $("#processes").addEventListener("click", (e) => { const b = e.target.closest("[data-pr]"); if (!b) return; state.process = b.dataset.pr; renderProcesses(); refreshAll(); commit(); });
 $("#stock").addEventListener("change", (e) => { state.stock = e.target.value; refreshQuote(); commit(); });
 $("#optionsField").addEventListener("change", (e) => { const i = e.target.closest("[data-o]"); if (!i) return; state.options[i.dataset.o] = i.checked; refreshAll(); commit(); });
+
+/* ─────────────────────────── panel: your details & templates ───────────────────────────
+ * Business and welcome cards are designed from the customer's details, the
+ * way Vistaprint and Moo do it: pick a layout, type the details once. */
+const fieldsOf = () => FIELDS[P().details] ?? [];
+const detail = (k) => state.details[k]?.trim() ? state.details[k] : fieldsOf().find(([f]) => f === k)?.[2] ?? "";
+const allDetails = () => Object.fromEntries(fieldsOf().map(([k]) => [k, detail(k)]));
+const brand = () => state.brand ?? brandInks().find((c) => !/^#(FFFFFF|14161A|000000)$/i.test(c)) ?? "#C4006B";
+
+function renderDetails() {
+  const kind = P().details;
+  $("#detailsField").hidden = !kind;
+  if (!kind) return;
+  $("#details").innerHTML = fieldsOf().map(([k, label, eg]) => k === "message"
+    ? `<label>${esc(label)}<textarea rows="2" data-d="${k}" placeholder="${esc(eg)}">${esc(state.details[k] ?? "")}</textarea></label>`
+    : `<label>${esc(label)}<input data-d="${k}" placeholder="${esc(eg)}" value="${esc(state.details[k] ?? "")}"></label>`).join("");
+  $("#brandColour").value = brand();
+  renderTemplateThumbs();
+}
+
+let thumbT;
+function renderTemplateThumbs() {
+  clearTimeout(thumbT);
+  thumbT = setTimeout(async () => {
+    const list = TEMPLATES[P().details] ?? [];
+    const area = areaOf(P().surfaces[0]);
+    $("#templates").innerHTML = list.map((t) => `<button class="tpl" role="listitem" data-tpl="${t.id}" title="Use the ${esc(t.name)} design"><span class="tpl-img"></span><span>${esc(t.name)}</span></button>`).join("");
+    for (const t of list) {
+      const built = await layoutTemplate(t);
+      const c = composeSurface(built.front.map((l) => ({ id: "t", ...l })), assets, area, 240);
+      const img = new Image(); img.src = c.toDataURL(); img.alt = "";
+      $(`#templates [data-tpl="${t.id}"] .tpl-img`)?.replaceChildren(img);
+    }
+  }, 60);
+}
+
+/** The newest uploaded artwork that can be placed, for templates' logo spot. */
+function latestLogo() {
+  const list = [...assets.values()].filter((a) => a.source && a.preview !== false);
+  const a = list.at(-1);
+  return a ? { id: a.id, aspect: (a.natW || a.source.width) / (a.natH || a.source.height) } : null;
+}
+
+async function layoutTemplate(t, area = areaOf(P().surfaces[0])) {
+  const ctx = { logo: latestLogo(), fieldOf: P().details };
+  const draft = t.make(area, { brand: brand(), ink: "#14161A" }, ctx);
+  await ensureFonts(Object.values(draft).flat().filter((l) => l.kind === "text"));
+  return buildTemplate(t, area, { brand: brand(), ink: "#14161A" }, ctx, allDetails(), (l) => layerSize({ ...l, rot: 0 }, assets));
+}
+
+$("#templates").addEventListener("click", async (e) => {
+  const b = e.target.closest("[data-tpl]"); if (!b) return;
+  const t = TEMPLATES[P().details].find((x) => x.id === b.dataset.tpl);
+  const built = await layoutTemplate(t);
+  for (const side of ["front", "back"]) {
+    if (!P().surfaces.some((s) => s.id === side)) continue;
+    state.designs[side] = (built[side] || []).map((l) => ({ ...l, id: uid() }));
+  }
+  state.surfaceId = "front"; state.selected = null;
+  afterStructuralChange();
+  toast(`${t.name} applied to the front and back. Undo brings your previous design back.`);
+});
+
+let detT;
+$("#details").addEventListener("input", (e) => {
+  const i = e.target.closest("[data-d]"); if (!i) return;
+  state.details[i.dataset.d] = i.value;
+  applyDetail(i.dataset.d);
+  clearTimeout(detT); detT = setTimeout(() => { commit(); renderTemplateThumbs(); }, 400);
+});
+$("#brandColour").addEventListener("input", (e) => {
+  const from = brand(), to = e.target.value;
+  state.brand = to;
+  // Recolour what was in the old brand colour, everywhere on the card.
+  for (const id of designedIds()) for (const l of state.designs[id]) {
+    if (l.kind === "shape" && l.fill.toLowerCase() === from.toLowerCase()) l.fill = to;
+    if ((l.kind === "text" || l.kind === "qr") && l.colour.toLowerCase() === from.toLowerCase()) l.colour = to;
+  }
+  editor.request(); updateTextures().then(updateMockup);
+  clearTimeout(detT); detT = setTimeout(() => { commit(); renderTemplateThumbs(); }, 400);
+});
+
+/** Rewrite every layer made from detail `k`, keeping left/right-aligned text on its margin. */
+function applyDetail(k) {
+  const v = detail(k);
+  for (const id of Object.keys(state.designs)) for (const l of state.designs[id]) {
+    if (l.field !== k && !(l.kind === "qr" && l.field === "website" && (k === "website" || k === "phone"))) continue;
+    if (l.kind === "qr") { l.data = qrData(allDetails()); continue; }
+    const before = layerSize({ ...l, rot: 0 }, assets).w;
+    l.text = v;
+    const after = layerSize({ ...l, rot: 0 }, assets).w;
+    if (l.anchor === "left") l.x += (after - before) / 2;
+    if (l.anchor === "right") l.x -= (after - before) / 2;
+  }
+  editor.request(); renderInspector(); renderToolbar();
+  updateTextures().then(updateMockup);
+}
 
 /* ─────────────────────────── panel: surfaces & views ─────────────────────────── */
 function renderSurfaces() {
@@ -168,7 +288,8 @@ function renderSurfaces() {
   $('#previewLabel').textContent = `${p.name} · ${colourName()} · ${S().label}`;
   $('#workspaceSubtitle').textContent = `${p.name} / ${p.blurb}`;
   const area = areaOf();
-  $('#areaInfo').textContent = `${surf().label} · ${mm(area.w)} × ${mm(area.h)} print area`;
+  const biggest = largestPaperIn(area.w, area.h);
+  $('#areaInfo').textContent = `${surf().label} · ${mm(area.w)} × ${mm(area.h)} print area` + (biggest ? ` · takes up to ${biggest}` : "");
   $("#surfaces").innerHTML = p.surfaces.map((s) =>
     `<button class="surf" role="tab" data-sf="${s.id}" aria-selected="${s.id === state.surfaceId}">${esc(s.label)}${state.designs[s.id]?.length ? '<span class="pip" aria-label="has design"></span>' : ""}</button>`).join("");
 
@@ -178,7 +299,11 @@ function renderSurfaces() {
   const names = { front: "Front", back: "Back", left: "Left", right: "Right", rear: "Rear" };
   $("#views").innerHTML = views.length > 1 && !views.includes("3d")
     ? views.map((v) => `<button class="view" role="tab" data-v="${v}" aria-selected="${v === current}">${names[v] ?? v}</button>`).join("") : "";
-  const hint = { gazebo: "Drag to walk round it", mug: "Drag to turn the mug" }[p.render];
+  const hint = { gazebo: "Drag to walk round it, up or down to look from above · scroll or pinch to zoom", mug: "Drag to turn the mug · scroll to zoom", flag: "Drag to turn it", banner: "Drag to turn it" }[p.render];
+  $("#scenes").hidden = p.render !== "gazebo";
+  $("#scenes").innerHTML = SCENES.map((s) => `<button role="radio" data-scene="${s.id}" aria-checked="${s.id === state.scene}">${s.label}</button>`).join("");
+  $("#turnTools").hidden = !TURN[p.render];
+  $("#zoomIn").hidden = $("#zoomOut").hidden = TURN[p.render] === "card";
   $("#stageHint").textContent = hint ?? (p.quoteOnly ? "Visual brief — we measure and confirm on site." : "");
   $("#stage").classList.toggle("grab", !!hint);
   $("#dropSurface").textContent = surf().label.toLowerCase();
@@ -190,7 +315,16 @@ $("#views").addEventListener("click", (e) => {
   const on = P().surfaces.filter((s) => s.view === b.dataset.v);
   setSurface((on.find((s) => state.designs[s.id]?.length) ?? on[0]).id);
 });
+/* The gazebo turns to face the part you pick, so the back wall is seen from behind. */
+const GAZEBO_VIEW = { front: -32, side: -58, back: 148, left: 58, right: -58 };
+function turnTo(target) {
+  const from = state.yaw, d = ((((target - from) % 360) + 540) % 360) - 180, t0 = performance.now(), ms = 650;
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) { state.yaw = from + d; updateMockup(); return; }
+  const step = (t) => { const k = Math.min(1, (t - t0) / ms), e = 1 - (1 - k) ** 3; state.yaw = from + d * e; updateMockup(); if (k < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
 function setSurface(id) {
+  if (P().render === "gazebo") { const side = surf(id).side; if (side in GAZEBO_VIEW) turnTo(GAZEBO_VIEW[side]); }
   state.surfaceId = id; state.selected = null;
   renderSurfaces(); renderInspector(); editor.request(); updateMockup(); renderToolbar();
 }
@@ -241,7 +375,7 @@ async function updateTextures(ids = P().surfaces.map((s) => s.id)) {
 
 function renderCtx(extra = {}) {
   return { productId: state.productId, product: P(), size: S(), colour: state.colour, tex, texCanvas,
-    active: state.surfaceId, yaw: state.yaw, pitch: state.pitch, options: state.options, ...extra };
+    active: state.surfaceId, yaw: state.yaw, pitch: state.pitch, zoom: state.zoom, parts: state.parts, scene: state.scene, options: state.options, stock: state.stock, ...extra };
 }
 function updateMockup() { if (state.colour) return renderMockup($("#stage"), renderCtx({ showGuides: $('#showGuides').checked })); }
 new ResizeObserver(() => updateMockup()).observe($('#stage'));
@@ -256,23 +390,58 @@ $('#downloadMockup').onclick = async () => {
   finally { button.disabled = false; }
 };
 
-// Orbit for 3D products.
+// Turning products: drag to orbit, wheel or pinch to zoom, a button for a full turn.
 {
-  let drag = null;
   const st = $("#stage");
+  const pts = new Map();
+  let drag = null, pinch = null;
+  const turnable = () => !!TURN[P().render];
+  const zoomBy = (k) => { state.zoom = Math.max(0.6, Math.min(2.4, state.zoom * k)); updateMockup(); };
   st.addEventListener("pointerdown", (e) => {
-    if (!["gazebo", "mug"].includes(P().render)) return;
-    drag = { x: e.clientX, y: e.clientY, yaw: state.yaw, pitch: state.pitch };
+    if (!turnable()) return;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
     st.setPointerCapture(e.pointerId);
+    if (pts.size === 2 && TURN[P().render] !== "card") {
+      const [a, b] = [...pts.values()];
+      pinch = { d0: Math.hypot(a.x - b.x, a.y - b.y), z0: state.zoom }; drag = null;
+    } else drag = { x: e.clientX, y: e.clientY, yaw: state.yaw, pitch: state.pitch };
   });
   st.addEventListener("pointermove", (e) => {
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch && pts.size === 2) {
+      const [a, b] = [...pts.values()];
+      state.zoom = Math.max(0.6, Math.min(2.4, pinch.z0 * Math.hypot(a.x - b.x, a.y - b.y) / pinch.d0));
+      updateMockup(); return;
+    }
     if (!drag) return;
     state.yaw = drag.yaw + (e.clientX - drag.x) * 0.45;
-    if (P().render === "gazebo") state.pitch = Math.max(2, Math.min(42, drag.pitch + (e.clientY - drag.y) * 0.25));
+    // Up to 70° looks down on the roof, so the canopy print can be checked.
+    if (P().render === "gazebo") state.pitch = Math.max(0, Math.min(70, drag.pitch + (e.clientY - drag.y) * 0.3));
     updateMockup();
   });
-  st.addEventListener("pointerup", () => { drag = null; });
-  st.addEventListener('pointercancel', () => { drag = null; });
+  const end = (e) => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; if (!pts.size) { drag = null; commit(); } };
+  st.addEventListener("pointerup", end);
+  st.addEventListener("pointercancel", end);
+  st.addEventListener("wheel", (e) => {
+    if (!turnable() || TURN[P().render] === "card") return;
+    e.preventDefault(); zoomBy(Math.exp(-e.deltaY * 0.0012));
+  }, { passive: false });
+  $("#zoomIn").onclick = () => zoomBy(1.2);
+  $("#zoomOut").onclick = () => zoomBy(1 / 1.2);
+  let spinning = 0;
+  $("#spin").onclick = () => {
+    if (spinning) return;
+    const from = state.yaw, t0 = performance.now(), ms = 3200;
+    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) { state.yaw = from + 90; updateMockup(); return; }
+    const step = (t) => {
+      const k = Math.min(1, (t - t0) / ms), e = k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2;
+      state.yaw = from + 360 * e; updateMockup();
+      spinning = k < 1 ? requestAnimationFrame(step) : 0;
+    };
+    spinning = requestAnimationFrame(step);
+  };
 }
 
 /* ─────────────────────────── adding artwork ─────────────────────────── */
@@ -327,6 +496,23 @@ async function addSample() {
 
 $("#addImage").onclick = $("#emptyUpload").onclick = () => $("#file").click();
 $("#addText").onclick = $("#emptyText").onclick = addText;
+$("#addShape").onclick = () => addLayer({ kind: "shape", shape: "rect", radius: 0, fill: brandColour(), w: areaOf().w * 0.5, ar: 0.25 });
+$("#addBackground").onclick = () => {
+  const a = areaOf(), W = a.w + a.bleed * 2, H = a.h + a.bleed * 2;
+  addLayer({ kind: "shape", shape: "rect", radius: 0, fill: brandColour(), w: W, ar: H / W, background: true }, 0);
+};
+$("#addQr").onclick = () => addLayer({ kind: "qr", data: "https://www.eminenceprinting.co.za", colour: isDark(material()) ? "#FFFFFF" : "#14161A", bg: null, w: Math.max(18, Math.min(30, areaOf().h * 0.5)) });
+/** The colour a new shape starts in: the design's own first ink, else Eminence magenta. */
+function brandColour() {
+  for (const l of layers()) if (l.kind === "text" && !/^#(fff|ffffff|14161a)$/i.test(l.colour)) return l.colour;
+  return "#C4006B";
+}
+function addLayer(props, at = layers().length) {
+  const l = { id: uid(), x: 0, y: 0, rot: 0, ...props };
+  layers().splice(at, 0, l);
+  state.selected = l.id;
+  afterStructuralChange();
+}
 $("#sample").onclick = addSample;
 $("#file").onchange = (e) => { addFiles([...e.target.files]); e.target.value = ""; };
 {
@@ -355,13 +541,14 @@ function act(kind) {
     case "fit": {
       const W = area.w - area.safe * 2, H = area.h - area.safe * 2 - area.hiddenBottom;
       const target = Math.min(W, H * aspect);
-      if (l.kind === "image") l.w = target; else l.size *= target / w;
+      if (l.kind !== "text") l.w = target; else l.size *= target / w;
       l.x = 0; l.y = -area.hiddenBottom / 2; l.rot = 0; break;
     }
     case "fill": {
       const W = area.w + area.bleed * 2, H = area.h + area.bleed * 2;
+      if (l.kind === "shape") { l.w = W; l.ar = H / W; l.x = 0; l.y = 0; l.rot = 0; break; }
       const target = Math.max(W, H * aspect);
-      if (l.kind === "image") l.w = target; else l.size *= target / w;
+      if (l.kind !== "text") l.w = target; else l.size *= target / w;
       l.x = 0; l.y = 0; l.rot = 0; break;
     }
     case "dup": { const c = { ...l, id: uid(), x: l.x + 6, y: l.y + 6 }; L.splice(i + 1, 0, c); state.selected = c.id; break; }
@@ -377,12 +564,30 @@ function renderToolbar() {
   $("#selTools").hidden = !selLayer();
   $("#emptyCta").hidden = layers().length > 0;
   $('#layerCount').textContent = layers().length;
-  $('#layerList').innerHTML = layers().length ? [...layers()].reverse().map(l => `<button class="layer-item" data-layer="${l.id}" aria-pressed="${l.id === state.selected}"><span>${l.kind === 'text' ? 'T' : '▧'}</span><b>${esc(l.kind === 'text' ? l.text || 'Text' : assets.get(l.assetId)?.name || 'Artwork')}</b></button>`).join('') : '<p class="fine">Upload artwork or add text to get started. Each print position has its own layers.</p>';
+  $('#layerList').innerHTML = layers().length ? [...layers()].reverse().map(l => `<button class="layer-item" data-layer="${l.id}" aria-pressed="${l.id === state.selected}"><span>${{ text: 'T', shape: l.background ? '◼' : '▭', qr: '▦' }[l.kind] ?? '▧'}</span><b>${esc(layerName(l))}</b></button>`).join('') : '<p class="fine">Upload artwork or add text to get started. Each print position has its own layers.</p>';
 }
 $('#layerList').onclick = e => {
   const button = e.target.closest('[data-layer]'); if (!button) return;
   state.selected = button.dataset.layer; renderInspector(); renderToolbar(); editor.request(); setMode('edit'); goTab('design');
 };
+
+/** Colours already used in this design, so new parts match the brand. */
+function brandInks() {
+  const out = [];
+  for (const id of designedIds()) for (const l of state.designs[id]) {
+    if (l.kind === "text" || l.kind === "qr") out.push(l.colour);
+    if (l.kind === "shape") out.push(l.fill);
+    if (l.kind === "image") for (const c of assets.get(l.assetId)?.colours || []) out.push(c.hex);
+  }
+  return [...new Set(out.map((c) => c.toUpperCase()))].slice(0, 6);
+}
+
+function layerName(l) {
+  if (l.kind === "text") return l.text || "Text";
+  if (l.kind === "shape") return l.background ? "Background" : l.shape === "ellipse" ? "Circle" : "Shape";
+  if (l.kind === "qr") return `QR · ${l.data}`;
+  return assets.get(l.assetId)?.name || "Artwork";
+}
 
 function afterStructuralChange() {
   setMode('edit'); goTab('design');
@@ -405,6 +610,7 @@ function renderInspector() {
       <div class="verdict ${v.level}"><div><b>${v.label}</b>${v.note}</div>${v.fix ? `<button class="btn btn-sm btn-ink" data-act="sharp">${v.fix}</button>` : ""}</div>
       ${a?.whiteBox && !a.bgRemoved ? `<div class="verdict warn"><div><b>White background</b>${isLight(material()) ? "Invisible on this colour, but it will print as a box on anything darker." : "This will print as a white box on a coloured product."}</div><button class="btn btn-sm btn-ink" data-act="rmbg">Remove it</button></div>` : ""}
       ${a?.bgRemoved ? `<div class="verdict ok"><div><b>Background removed</b>We'll do this properly from your original file.</div><button class="btn btn-sm btn-ghost" data-act="rsbg">Undo</button></div>` : ""}
+      <div class="print-size" id="printSize">${printSizeHtml(l)}</div>
       <div class="insp-grid">
         <label>Width (mm)<input type="number" min="3" step="1" data-f="w" value="${Math.round(sz.w)}"></label>
         <label>Height (mm)<input type="number" min="3" step="1" data-f="h" value="${Math.round(sz.h)}"></label>
@@ -412,14 +618,42 @@ function renderInspector() {
         <div class="insp-wide inks">${a?.photo ? "Full colour (photo or gradient)" : `${a?.colours.length ?? 0} ink colour${a?.colours.length === 1 ? "" : "s"}`}
           ${a?.photo ? "" : (a?.colours || []).map((c) => `<i style="background:${c.hex}" title="${c.hex}"></i>`).join("")}</div>
       </div>`;
+  } else if (l.kind === "shape") {
+    const sz = layerSize(l, assets);
+    const kind = l.shape === "ellipse" ? "ellipse" : l.radius ? "round" : "rect";
+    box.innerHTML = `
+      <div class="insp-head"><h3>${l.background ? "Background" : "Shape"}</h3>
+        <div class="seg-row" role="group" aria-label="Shape">${[["rect", "Square"], ["round", "Rounded"], ["ellipse", "Circle"]].map(([k, n]) =>
+          `<button data-shape="${k}" aria-pressed="${k === kind}">${n}</button>`).join("")}</div></div>
+      <div class="insp-grid">
+        <div class="insp-wide"><span>Colour</span><div class="colours-row">${[...new Set([...brandInks(), ...TEXT_COLOURS])].slice(0, 14).map((c) => `<button class="sw" data-fill="${c}" aria-checked="${c.toLowerCase() === l.fill.toLowerCase()}" style="background:${c}" aria-label="${c}"></button>`).join("")}<input type="color" data-f="fill" value="${l.fill}" aria-label="Custom colour"></div></div>
+        <label>Width (mm)<input type="number" min="0.5" step="0.5" data-f="w" value="${+sz.w.toFixed(1)}"></label>
+        <label>Height (mm)<input type="number" min="0.5" step="0.5" data-f="h" value="${+sz.h.toFixed(1)}"></label>
+        <label>Rotation (°)<input type="number" step="1" data-f="rot" value="${Math.round(l.rot)}"></label>
+        ${kind === "round" ? `<label>Corners (mm)<span class="rng"><input type="range" min="0.5" max="${Math.max(1, Math.round(Math.min(sz.w, sz.h) / 2))}" step="0.5" data-f="radius" value="${l.radius}"><output>${l.radius}</output></span></label>` : ""}
+      </div>`;
+  } else if (l.kind === "qr") {
+    const small = l.w < 18, n = qrModules(l.data).n;
+    box.innerHTML = `
+      <div class="insp-head"><h3>QR code</h3><span class="mono" style="font-size:.74rem;color:var(--muted)">${n} × ${n}</span></div>
+      <div class="verdict ${small ? "warn" : "ok"}"><div><b>${small ? "Small for a phone" : "Scans well"}</b>${small ? " Keep a QR code at least 18 mm wide so every phone camera reads it." : " Big enough for any phone camera. Test-scan your printed proof."}</div></div>
+      <div class="print-size" id="printSize">${printSizeHtml(l)}</div>
+      <div class="insp-grid">
+        <label class="insp-wide">Link, WhatsApp or text<textarea data-f="data" rows="2">${esc(l.data)}</textarea></label>
+        <div class="insp-wide"><span>Colour</span><div class="colours-row">${TEXT_COLOURS.slice(0, 6).map((c) => `<button class="sw" data-colour="${c}" aria-checked="${c === l.colour}" style="background:${c}" aria-label="${c}"></button>`).join("")}<input type="color" data-f="colour" value="${l.colour}" aria-label="Custom colour"></div></div>
+        <label>Size (mm)<input type="number" min="10" step="1" data-f="w" value="${Math.round(l.w)}"></label>
+        <label>Rotation (°)<input type="number" step="1" data-f="rot" value="${Math.round(l.rot)}"></label>
+        <label class="opt-row insp-wide" style="flex-direction:row;align-items:center"><input type="checkbox" data-f="qrbg"${l.bg ? " checked" : ""}> White box behind it (for dark or busy backgrounds)</label>
+      </div>`;
   } else {
     const f = FONTS.find((x) => x.family === l.font) ?? FONTS[0];
     box.innerHTML = `
       <div class="insp-head"><h3>Text</h3>
         <div class="seg-row" role="group" aria-label="Alignment">${["left", "center", "right"].map((al) => `<button data-align="${al}" aria-pressed="${l.align === al}">${al === "center" ? "Centre" : al[0].toUpperCase() + al.slice(1)}</button>`).join("")}</div></div>
+      <div class="print-size" id="printSize">${printSizeHtml(l)}</div>
       <div class="insp-grid">
         <label class="insp-wide">Your text<textarea data-f="text" rows="2">${esc(l.text)}</textarea></label>
-        <label>Font<select data-f="font">${FONTS.map((x) => `<option value="${x.family}"${x.family === l.font ? " selected" : ""} style="font-family:'${x.family}'">${x.label}</option>`).join("")}</select></label>
+        <label>Font<select data-f="font">${[...new Set(FONTS.map((x) => x.group))].map((gr) => `<optgroup label="${gr}">${FONTS.filter((x) => x.group === gr).map((x) => `<option value="${x.family}"${x.family === l.font ? " selected" : ""} style="font-family:'${x.family}'">${x.label}</option>`).join("")}</optgroup>`).join("")}</select></label>
         <label>Weight<select data-f="weight">${f.weights.map((w) => `<option${w === l.weight ? " selected" : ""}>${w}</option>`).join("")}</select></label>
         <label>Size (mm)<input type="number" min="2" step="1" data-f="size" value="${Math.round(l.size)}"></label>
         <label>Rotation (°)<input type="number" step="1" data-f="rot" value="${Math.round(l.rot)}"></label>
@@ -439,20 +673,50 @@ function syncInspector() {
   const sz = layerSize(l, assets);
   const set = (f, v) => { const i = $(`#inspector [data-f="${f}"]`); if (i && document.activeElement !== i) i.value = v; };
   set("w", Math.round(sz.w)); set("h", Math.round(sz.h)); set("rot", Math.round(l.rot)); set("size", Math.round(l.size ?? 0));
+  const ps = $("#printSize"); if (ps) ps.innerHTML = printSizeHtml(l);
+}
+
+/* "Prints at 20 × 12 cm — about A5, 340 DPI", and buttons to make it exactly
+ * an A-size. The sizes a customer can choose stop at what the area holds. */
+function printSizeHtml(l) {
+  const sz = layerSize({ ...l, rot: 0 }, assets), area = areaOf();
+  const paper = paperFor(sz.w, sz.h);
+  const a = l.kind === "image" ? assets.get(l.assetId) : null;
+  const dpi = a && !a.vector && a.preview ? effectiveDpi(a.natW, sz.w) : null;
+  const res = l.kind === "text" ? "text prints sharp at any size" : l.kind !== "image" ? "vector, sharp at any size" : a?.vector ? "vector, sharp at any size" : dpi ? `${dpi} DPI at this size` : "resolution checked by hand";
+  const chips = PAPER.filter(([n, pw, ph]) => pw >= 74 && (pw <= Math.max(area.w, area.h) * 1.6)).map(([n]) => {
+    const fits = scaleToPaper(sz.w, sz.h, n, area.w, area.h) != null;
+    return `<button class="chip" data-paper="${n}" aria-pressed="${n === paper}"${fits ? ` title="Make it ${n}"` : ` disabled title="An ${n} ${sz.w >= sz.h ? "landscape" : "portrait"} design doesn't fit this ${mm(area.w)} × ${mm(area.h)} print area"`}>${n}</button>`;
+  }).join("");
+  return `<div class="ps-read"><b>${cm(sz.w)} × ${cm(sz.h)} cm</b><span>${paper ? `about ${paper}` : "bigger than A0"} · ${res}</span></div>
+    <div class="ps-chips" role="group" aria-label="Print size">${chips}</div>`;
+}
+const cm = (v) => (Math.round(v) / 10).toFixed(v >= 1000 ? 0 : 1);
+async function sizeToPaper(l, name) {
+  await ensureFonts([l]);                    // measure the real face, not the fallback
+  const sz = layerSize({ ...l, rot: 0 }, assets), area = areaOf(), k = scaleToPaper(sz.w, sz.h, name, area.w, area.h);
+  if (!k) return;
+  if (l.kind !== "text") l.w *= k; else l.size *= k;
+  renderInspector(); editor.request(); liveUpdate(); commit();
 }
 
 $("#inspector").addEventListener("input", (e) => {
   const l = selLayer(); const f = e.target.dataset.f; if (!l || !f) return;
   let v = e.target.type === "checkbox" ? e.target.checked : e.target.value;
-  if (["rot", "size", "spacing", "arc", "outline", "weight"].includes(f)) v = +v;
+  if (["rot", "size", "spacing", "arc", "outline", "weight", "radius"].includes(f)) v = +v;
+  if (f === "qrbg") { l.bg = v ? "#FFFFFF" : null; editor.request(); liveUpdate(); clearTimeout(inspT); inspT = setTimeout(commit, 400); return; }
+  if (f === "data" && !String(v).trim()) return;
   if (f === "w" || f === "h") {
     const sz = layerSize({ ...l, rot: 0 }, assets), k = (+v || 1) / (f === "w" ? sz.w : sz.h);
-    if (l.kind === "image") l.w *= k;
+    if (l.kind === "shape") {                   // shapes: width and height are independent
+      const n = Math.max(0.5, +v || 1);
+      if (f === "w") { l.ar = sz.h / n; l.w = n; } else l.ar = n / l.w;
+    } else if (l.kind !== "text") l.w *= k;
   } else l[f] = v;
   if (f === "font") { const ff = FONTS.find((x) => x.family === v); if (!ff.weights.includes(l.weight)) l.weight = ff.weights.at(-1); renderInspector(); }
   const out = e.target.parentElement.querySelector("output");
   if (out) out.textContent = f === "arc" ? `${v}°` : f === "spacing" ? (+v).toFixed(2) : v;
-  ensureFonts([l]).then(() => { editor.request(); liveUpdate(); });
+  ensureFonts([l]).then(() => { editor.request(); liveUpdate(); syncInspector(); });
   syncInspector();
   clearTimeout(inspT); inspT = setTimeout(commit, 400);
 });
@@ -462,6 +726,12 @@ $("#inspector").addEventListener("click", (e) => {
   const b = e.target.closest("button"); if (!b) return;
   if (b.dataset.colour) { l.colour = b.dataset.colour; renderInspector(); editor.request(); commit(); }
   if (b.dataset.align) { l.align = b.dataset.align; renderInspector(); editor.request(); commit(); }
+  if (b.dataset.fill) { l.fill = b.dataset.fill; renderInspector(); editor.request(); liveUpdate(); commit(); }
+  if (b.dataset.shape) {
+    l.shape = b.dataset.shape === "ellipse" ? "ellipse" : "rect";
+    l.radius = b.dataset.shape === "round" ? Math.max(1, Math.round(Math.min(l.w, l.w * l.ar) * 0.15)) : 0;
+    renderInspector(); renderToolbar(); editor.request(); liveUpdate(); commit();
+  }
   if (b.dataset.act === "rmbg" || b.dataset.act === "rsbg") {
     const a = assets.get(l.assetId);
     b.disabled = true; b.textContent = "Working…";
@@ -471,6 +741,7 @@ $("#inspector").addEventListener("click", (e) => {
     }, 20);
   }
   if (b.dataset.act === "sharp") { sharpen(l); }
+  if (b.dataset.paper) sizeToPaper(l, b.dataset.paper);
 });
 
 /* ─────────────────────────── checks ─────────────────────────── */
@@ -515,8 +786,13 @@ function runChecks() {
           out.push({ level: "bad", text: `${s.label}: ${a.name} is a photo or gradient — ${proc.label.toLowerCase()} can't reproduce that.`, fix: p.processes.includes("dtf") ? ["Use DTF", () => { state.process = "dtf"; renderProcesses(); refreshAll(); commit(); }] : null });
         if (a && !a.photo && a.colours.length && a.colours[0].share > 0.5 && contrastRatio(a.colours[0].hex, material()) < 1.35)
           out.push({ level: "warn", text: `${s.label}: most of ${a.name} is close to the ${colourName().toLowerCase()} — it may disappear.` });
-      } else {
-        if (contrastRatio(l.colour, material()) < 1.6) out.push({ level: "warn", text: `${s.label}: “${l.text.slice(0, 20)}” is hard to see on ${colourName().toLowerCase()}.` });
+      } else if (l.kind === "qr") {
+        const under = colourUnder(L, l);
+        if (l.w < 18) out.push({ level: "warn", text: `${s.label}: the QR code is under 18 mm — some phones won't read it.` });
+        if (contrastRatio(l.colour, l.bg || under) < 3) out.push({ level: "warn", text: `${s.label}: the QR code needs more contrast to scan — darker code, or a white box behind it.` });
+      } else if (l.kind === "text") {
+        const under = colourUnder(L, l);
+        if (contrastRatio(l.colour, under) < 1.6) out.push({ level: "warn", text: `${s.label}: “${l.text.slice(0, 20)}” is hard to see on ${under === material() ? colourName().toLowerCase() : "the colour behind it"}.` });
         const minText = { Print: 1.8, Clothing: 5, Drinkware: 4 }[p.group] ?? 20;
         if (l.size < minText) out.push({ level: "warn", text: `${s.label}: text under ${minText} mm may not print cleanly.` });
         if (area.safe && corners.some(([x, y]) => Math.abs(x) > area.w / 2 - area.safe || Math.abs(y) > area.h / 2 - area.safe))
@@ -540,11 +816,26 @@ function runChecks() {
       if (touches && !reaches) out.push({ level: "warn", text: `${s.label}: artwork reaches the edge but not the red bleed line — extend it, or a white sliver can show after cutting.` });
     }
   }
+  if (P().details) {
+    const left = fieldsOf().filter(([k]) => !state.details[k]?.trim() && ids.some((id) => state.designs[id].some((l) => l.field === k || (k === "website" && l.kind === "qr" && l.field)))).map(([, label]) => label.toLowerCase());
+    if (left.length) out.push({ level: "warn", text: `The card still shows example details (${left.join(", ")}). Type yours under “Your details”, or delete what you don't need.` });
+  }
   if (state.process === "embroidery") out.push({ level: "info", text: "Embroidery preview shows placement only. We send a digitised stitch proof before production." });
   if (!out.some((c) => c.level === "bad" || c.level === "warn")) out.unshift({ level: "ok", text: "Artwork checks passed." });
   // One line per problem, however many layers trip it.
   const seen = new Set();
   return out.filter((c) => !seen.has(c.text) && seen.add(c.text));
+}
+
+/** The colour a layer sits on: the topmost shape under its centre, else the product. */
+function colourUnder(L, l) {
+  for (let i = L.indexOf(l) - 1; i >= 0; i--) {
+    const u = L[i];
+    if (u.kind !== "shape") continue;
+    const { w, h } = layerSize(u, assets);
+    if (Math.abs(l.x - u.x) <= w / 2 && Math.abs(l.y - u.y) <= h / 2) return u.fill;
+  }
+  return material();
 }
 
 let checkFixes = [];
@@ -584,6 +875,8 @@ function inkCount(id) {
   const cols = [];
   for (const l of state.designs[id] || []) {
     if (l.kind === "text") { cols.push(l.colour); if (l.outline > 0) cols.push(l.outlineColour); continue; }
+    if (l.kind === "shape") { cols.push(l.fill); continue; }
+    if (l.kind === "qr") { cols.push(l.colour); if (l.bg) cols.push(l.bg); continue; }
     const a = assets.get(l.assetId);
     if (!a) continue;
     if (a.photo) return 99;
@@ -610,14 +903,13 @@ function currentQuote() {
 
 function refreshQuote() {
   const q = currentQuote();
-  const badge = PRICES_CONFIRMED ? "" : `<span class="badge" title="Eminence confirms every price before you pay">Estimate</span>`;
   let html;
   if (q.quoteOnly) {
-    html = `<div class="q-total"><div><div class="label" style="margin:0">Indicative ${badge}</div><div class="n">${rand(q.range[0])}–${rand(q.range[1]).slice(1)}</div></div><div class="each">incl. VAT<br>${q.units} × ${esc(P().name.toLowerCase())}</div></div>`;
+    html = `<div class="q-total"><div><div class="label" style="margin:0">Installed price range</div><div class="n">${rand(q.range[0])}–${rand(q.range[1]).slice(1)}</div></div><div class="each">incl. VAT<br>${q.units} × ${esc(P().name.toLowerCase())}</div></div>`;
   } else {
     html = `<table class="q-lines">${q.lines.map((l) => `<tr${l.setup ? ' class="setup"' : ""}><td>${esc(l.label)} ${l.run ? "" : `<span class="qq">× ${l.qty}</span>`}</td><td>${rand2(l.total)}</td></tr>`).join("")}
-      <tr><td class="qq">VAT 15%</td><td>${rand2(q.vat)}</td></tr></table>
-      <div class="q-total"><div><div class="label" style="margin:0">Total ${badge}</div><div class="n">${rand2(q.total)}</div></div><div class="each">${q.units ? `${rand2(q.each)} each<br>${q.units} item${q.units === 1 ? "" : "s"}` : ""}</div></div>`;
+      <tr><td class="qq">VAT ${Math.round(prices().vat * 100)}%</td><td>${rand2(q.vat)}</td></tr></table>
+      <div class="q-total"><div><div class="label" style="margin:0">Total</div><div class="n">${rand2(q.total)}</div></div><div class="each">${q.units ? `${rand2(q.each)} each<br>${q.units} item${q.units === 1 ? "" : "s"}` : ""}</div></div>`;
   }
   html += q.notes.map((n) => `<p class="q-note">${esc(n)}</p>`).join("");
   html += q.blockers.map((b) => `<div class="q-block">${esc(b)}</div>`).join("");
@@ -628,7 +920,7 @@ function refreshQuote() {
 }
 
 /* ─────────────────────────── commit / history / draft ─────────────────────────── */
-function snapshot() { return { productId: state.productId, sizeId: state.sizeId, colour: state.colour, process: state.process, stock: state.stock, options: state.options, designs: state.designs }; }
+function snapshot() { return { productId: state.productId, sizeId: state.sizeId, colour: state.colour, process: state.process, stock: state.stock, options: state.options, designs: state.designs, details: state.details, brand: state.brand, parts: state.parts, scene: state.scene }; }
 
 let draftT, lastHist = "";
 async function commit(force = false, rememberArtwork = true) {
@@ -728,7 +1020,7 @@ async function openSend() {
   const q = currentQuote();
   const qt = q.quoteOnly ? `${rand(q.range[0])}–${rand(q.range[1])} (indicative)` : `${rand2(q.total)} incl. VAT`;
   $("#sendSummary").textContent = `${q.units} × ${P().name} · ${colourName()} · ${PROCESSES[state.process].short}\n` +
-    designedIds().map((id) => `• ${surf(id).label}`).join("\n") + `\nEstimate: ${qt}`;
+    designedIds().map((id) => `• ${surf(id).label}`).join("\n") + `\nPrice: ${qt}`;
   $("#sendForm").hidden = false; $("#sent").hidden = true; $("#sendError").hidden = true; $("#progress").hidden = true;
   $("#sendGo").textContent = P().quoteOnly ? "Request quote on WhatsApp" : "Send on WhatsApp";
   dlg.showModal();
@@ -760,9 +1052,14 @@ $("#sendForm").addEventListener("submit", async (e) => {
     const specBlob = new Blob([JSON.stringify(spec, null, 2)], { type: "application/json" });
     const used = new Set(designedIds().flatMap((id) => state.designs[id].filter((l) => l.kind === "image").map((l) => l.assetId)));
     const originals = [...assets.values()].filter((a) => used.has(a.id) && a.name !== "sample-logo.svg");
+    go.textContent = "Making print files…";
+    const prints = await makePrintFiles({ ref: spec.ref, product: P(), assets, base: P().printedBase ? state.colour : null,
+      surfaces: designedIds().map((id) => ({ id, layers: state.designs[id], area: areaOf(surf(id)) })) });
+    spec.print_files = prints.map((f) => ({ surface: f.id, file: f.name, size_mm: [Math.round(f.wMm), Math.round(f.hMm)], dpi: f.dpi, px: f.px }));
+    const specOut = new Blob([JSON.stringify(spec, null, 2)], { type: "application/json" });
     go.textContent = "Uploading…"; $("#progress").hidden = false;
-    const up = await uploadJob({ spec, proof, specBlob, originals, onProgress: (k) => { $("#progress span").style.width = `${Math.round(k * 100)}%`; } });
-    if (!up.ok) { download(proof, `${spec.ref}-proof.png`); download(specBlob, `${spec.ref}-spec.json`); }
+    const up = await uploadJob({ spec, proof, specBlob: specOut, originals, prints, onProgress: (k) => { $("#progress span").style.width = `${Math.round(k * 100)}%`; } });
+    if (!up.ok) { download(proof, `${spec.ref}-proof.png`); download(specOut, `${spec.ref}-spec.json`); for (const f of prints) download(f.blob, f.name); }
     const qt = q.quoteOnly ? `${rand(q.range[0])}–${rand(q.range[1])} indicative` : `${rand2(q.total)} incl. VAT`;
     const msg = orderMessage({ spec, quoteText: qt, customer, proofUrl: up.ok ? up.proofUrl : null, attached: !up.ok });
     const url = whatsappUrl(msg);
@@ -770,8 +1067,8 @@ $("#sendForm").addEventListener("submit", async (e) => {
     lastSent = { spec, proof, url };
     $("#sentRef").textContent = spec.ref;
     $("#sentText").textContent = up.ok
-      ? "Your files and proof are with Eminence. Finish sending the WhatsApp message and they'll reply with your confirmed price."
-      : "We've saved your proof to your downloads. Send the WhatsApp message, then attach the proof image to it — Eminence replies with your confirmed price.";
+      ? "Your files and proof are with Eminence. Finish sending the WhatsApp message and they'll reply with payment details and a production proof."
+      : "We've saved your proof to your downloads. Send the WhatsApp message, then attach the proof image to it — Eminence replies with payment details and a production proof.";
     $("#sentWa").href = url;
     $("#sendForm").hidden = true; $("#sent").hidden = false;
     clearDraft();
@@ -801,7 +1098,7 @@ function hideToast() { $("#toast").hidden = true; }
 
 /* ─────────────────────────── boot ─────────────────────────── */
 (async function boot() {
-  await loadManifest();
+  await Promise.all([loadManifest(), loadPrices()]);
   const params = new URLSearchParams(location.search);
   const start = PRODUCTS[params.get("product")] ? params.get("product") : "tee";
   state.productId = start;

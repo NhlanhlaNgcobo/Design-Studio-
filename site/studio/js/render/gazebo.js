@@ -12,6 +12,11 @@
  *
  * Lighting is per face from one sun, applied over the artwork — the same
  * "artwork under the lighting" rule as the garments.
+ *
+ * The frame is a pop-up gazebo's: square legs on foot plates, and the scissor
+ * truss between the legs under the valance — the detail that makes it read as
+ * a gazebo and not a tent. It can stand in a studio, on grass or on paving;
+ * the ground is drawn in the same 3D, so it turns with the gazebo.
  */
 
 import { ROOF_RISE, VALANCE_MM } from "../products.js";
@@ -24,7 +29,13 @@ const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const lerp3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 
-export function drawGazebo(canvas, { size, colour, texCanvas, yaw = -32, pitch = 18, options = {}, active }, opts = {}) {
+export const SCENES = [
+  { id: "studio", label: "Studio" },
+  { id: "grass", label: "Grass" },
+  { id: "paving", label: "Paving" },
+];
+
+export function drawGazebo(canvas, { size, colour, texCanvas, yaw = -32, pitch = 18, zoom = 1, frame = "#C9CDD2", scene = "studio", options = {}, active, editing = active }, opts = {}) {
   // An explicit w/h is an offscreen export (the proof); otherwise fill the element.
   const dpr = opts.w ? 1 : Math.min(2, devicePixelRatio || 1);
   const cw = opts.w || canvas.clientWidth || 600, ch = opts.h || canvas.clientHeight || 600;
@@ -64,10 +75,14 @@ export function drawGazebo(canvas, { size, colour, texCanvas, yaw = -32, pitch =
       Math.min(...points.map(p => p[1])), Math.max(...points.map(p => p[1]))];
   };
   const b = measure();
-  F *= Math.min(cw * .82 / (b[1] - b[0]), ch * .82 / (b[3] - b[2]));
+  F *= Math.min(cw * .78 / (b[1] - b[0]), ch * .78 / (b[3] - b[2])) * Math.max(0.5, Math.min(2.4, zoom));
   const fitted = measure();
   offsetX = cw / 2 - (fitted[0] + fitted[1]) / 2;
   offsetY = ch / 2 - (fitted[2] + fitted[3]) / 2;
+
+  // Where the ground meets the sky on screen: a point infinitely far ahead
+  // projects to tan(pitch) above the centre line.
+  drawGround(g, { cw, ch, P, scene, W, D, dist, horizon: ch * 0.54 + offsetY - F * Math.tan(pa) });
 
   /* faces: [corners, uv per corner (0..1), texture, base colour, label] */
   const fr = [-W / 2, LEG, D / 2], fl = [W / 2, LEG, D / 2], bl = [W / 2, LEG, -D / 2], br = [-W / 2, LEG, -D / 2];
@@ -87,38 +102,74 @@ export function drawGazebo(canvas, { size, colour, texCanvas, yaw = -32, pitch =
     quad(fl, bl, T["valance-side"], "valance-side"),
     quad(br, fr, repeat ? T["valance-side"] : null),
   );
-  if (T["wall-back"] || active === "wall-back") {
-    const top = LEG - VAL;
-    faces.push({ pts: [[W / 2, top, -D / 2], [-W / 2, top, -D / 2], [-W / 2, 0, -D / 2], [W / 2, 0, -D / 2]],
-      tex: T["wall-back"], id: "wall-back" });
-  }
+  // Walls hang inside the legs from under the valance to the ground. Each is
+  // shown when it carries a design or is selected (with or without the print
+  // area outline). Wound TL→TR→BR→BL as seen from outside.
+  const top = LEG - VAL;
+  const walls = {
+    "wall-back": [[W / 2, top, -D / 2], [-W / 2, top, -D / 2], [-W / 2, 0, -D / 2], [W / 2, 0, -D / 2]],
+    "wall-left": [[-W / 2, top, -D / 2], [-W / 2, top, D / 2], [-W / 2, 0, D / 2], [-W / 2, 0, -D / 2]],
+    "wall-right": [[W / 2, top, D / 2], [W / 2, top, -D / 2], [W / 2, 0, -D / 2], [W / 2, 0, D / 2]],
+  };
+  for (const [id, pts] of Object.entries(walls))
+    if (T[id] || editing === id) faces.push({ pts, tex: T[id], id });
 
   /* ground shadow */
   const sh = [[-W * 0.62, 0, D * 0.62], [W * 0.62, 0, D * 0.62], [W * 0.62, 0, -D * 0.62], [-W * 0.62, 0, -D * 0.62]].map(P);
   g.save();
   g.filter = `blur(${Math.round(Math.min(cw, ch) * 0.025)}px)`;
-  g.fillStyle = "rgba(20,22,26,.26)";
+  g.fillStyle = scene === "studio" ? "rgba(20,22,26,.26)" : "rgba(10,14,8,.34)";
   poly(g, sh); g.fill();
   g.restore();
 
-  /* legs as depth-sorted items too, so the front legs pass in front of the back wall */
+  /* frame: legs, foot plates and the scissor truss — depth-sorted with the faces */
   const items = faces.map((f) => {
     const s = f.pts.map(P);
     return { kind: "face", f, s, z: s.reduce((a, p) => a + p[2], 0) / s.length };
   });
-  for (const [x, z] of [[-W / 2, D / 2], [W / 2, D / 2], [W / 2, -D / 2], [-W / 2, -D / 2]]) {
-    const a = P([x, 0, z]), b = P([x, LEG - VAL, z]);
-    items.push({ kind: "leg", a, b, z: (a[2] + b[2]) / 2 });
+  const corners = [[-W / 2, D / 2], [W / 2, D / 2], [W / 2, -D / 2], [-W / 2, -D / 2]];
+  for (const [x, z] of corners) {
+    const a = P([x, 0, z]), bb = P([x, top, z]);
+    items.push({ kind: "leg", a, b: bb, z: (a[2] + bb[2]) / 2 });
+    const pl = 110;
+    items.push({ kind: "plate", s: [[x - pl, 2, z - pl], [x + pl, 2, z - pl], [x + pl, 2, z + pl], [x - pl, 2, z + pl]].map(P), z: P([x, 0, z])[2] - 1 });
+  }
+  const TRUSS = 420;                                // depth of the scissor band
+  for (let i = 0; i < 4; i++) {
+    const [x0, z0] = corners[i], [x1, z1] = corners[(i + 1) % 4];
+    const len = Math.hypot(x1 - x0, z1 - z0), n = Math.max(2, Math.round(len / 750));
+    const lines = [];
+    for (let k = 0; k < n; k++) {
+      const t0 = k / n, t1 = (k + 1) / n;
+      const p = (t, y) => P([x0 + (x1 - x0) * t, y, z0 + (z1 - z0) * t]);
+      lines.push([p(t0, top), p(t1, top - TRUSS)], [p(t0, top - TRUSS), p(t1, top)]);
+    }
+    const mid = P([(x0 + x1) / 2, top - TRUSS / 2, (z0 + z1) / 2]);
+    items.push({ kind: "truss", lines, z: mid[2] - 0.5 });
   }
   items.sort((p, q) => p.z - q.z);
 
+  const metalLight = shade(frame, 1.25), metalDark = shade(frame, 0.62);
   for (const it of items) {
     if (it.kind === "leg") {
       const k = F / (dist - it.z);
-      g.strokeStyle = "#9AA0A7"; g.lineWidth = Math.max(2, 40 * k); g.lineCap = "butt";
+      g.lineCap = "butt";
+      g.strokeStyle = metalDark; g.lineWidth = Math.max(2.5, 44 * k);
       g.beginPath(); g.moveTo(it.a[0], it.a[1]); g.lineTo(it.b[0], it.b[1]); g.stroke();
-      g.strokeStyle = "rgba(255,255,255,.45)"; g.lineWidth = Math.max(1, 12 * k);
-      g.beginPath(); g.moveTo(it.a[0] - 8 * k, it.a[1]); g.lineTo(it.b[0] - 8 * k, it.b[1]); g.stroke();
+      g.strokeStyle = frame; g.lineWidth = Math.max(1.5, 26 * k);
+      g.beginPath(); g.moveTo(it.a[0] - 6 * k, it.a[1]); g.lineTo(it.b[0] - 6 * k, it.b[1]); g.stroke();
+      g.strokeStyle = metalLight; g.globalAlpha = 0.6; g.lineWidth = Math.max(1, 7 * k);
+      g.beginPath(); g.moveTo(it.a[0] - 12 * k, it.a[1]); g.lineTo(it.b[0] - 12 * k, it.b[1]); g.stroke();
+      g.globalAlpha = 1;
+      continue;
+    }
+    if (it.kind === "plate") { g.fillStyle = metalDark; poly(g, it.s); g.fill(); continue; }
+    if (it.kind === "truss") {
+      const k = F / (dist - it.z);
+      g.strokeStyle = shade(frame, 0.85); g.lineWidth = Math.max(1, 16 * k); g.lineCap = "round";
+      g.beginPath();
+      for (const [a, c] of it.lines) { g.moveTo(a[0], a[1]); g.lineTo(c[0], c[1]); }
+      g.stroke();
       continue;
     }
     const { f, s } = it;
@@ -150,6 +201,41 @@ export function drawGazebo(canvas, { size, colour, texCanvas, yaw = -32, pitch =
       poly(g, s); g.stroke(); g.restore();
     }
   }
+}
+
+/* The setting. Studio leaves the stage's own backdrop; grass and paving draw
+ * sky and a ground plane in the gazebo's own perspective. */
+function drawGround(g, { cw, ch, P, scene, W, D, dist, horizon }) {
+  if (scene === "studio") return;
+  const hy = Math.max(-ch, Math.min(ch * 2, horizon));
+  const sky = g.createLinearGradient(0, Math.min(0, hy - ch), 0, Math.max(1, hy));
+  sky.addColorStop(0, "#8FBFE6"); sky.addColorStop(1, "#E6F0F5");
+  g.fillStyle = sky; g.fillRect(0, 0, cw, ch);
+  // Ground colour all the way from the horizon down, so the plane never ends.
+  g.fillStyle = scene === "grass" ? "#7FA05A" : "#B9B4AA";
+  g.fillRect(0, hy, cw, ch - hy + 1);
+  // Never past the camera: the corners must stay in front of it at any orbit.
+  const R = Math.min(dist * 0.6, Math.max(W, D) * 3);
+  const ground = [[-R, 0, -R], [R, 0, -R], [R, 0, R], [-R, 0, R]].map(P);
+  if (scene === "grass") {
+    // Mowing stripes, 1 m wide, in perspective.
+    g.fillStyle = "rgba(255,255,255,.07)";
+    for (let x = -R; x < R; x += 2000) { poly(g, [[x, 0, -R], [x + 1000, 0, -R], [x + 1000, 0, R], [x, 0, R]].map(P)); g.fill(); }
+  } else {
+    // 600 mm pavers: joint lines both ways.
+    g.strokeStyle = "rgba(60,56,50,.22)"; g.lineWidth = 1;
+    g.beginPath();
+    for (let v = -R; v <= R; v += 600) {
+      const a = P([v, 0, -R]), b = P([v, 0, R]); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]);
+      const c = P([-R, 0, v]), d = P([R, 0, v]); g.moveTo(c[0], c[1]); g.lineTo(d[0], d[1]);
+    }
+    g.stroke();
+  }
+  // Haze toward the horizon: distant ground fades into the sky.
+  const band = Math.max(20, ch * 0.22);
+  const far = g.createLinearGradient(0, hy, 0, hy + band);
+  far.addColorStop(0, "rgba(230,240,245,.95)"); far.addColorStop(1, "rgba(230,240,245,0)");
+  g.fillStyle = far; g.fillRect(0, hy, cw, band);
 }
 
 function poly(g, s) {

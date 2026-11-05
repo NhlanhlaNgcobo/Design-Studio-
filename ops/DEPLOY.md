@@ -74,6 +74,7 @@ match.
 | `S3_BUCKET` | `eminence-jobs` | Studio orders |
 | `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | from step 4 | Studio orders |
 | `JOB_SECRET` | 32+ random characters (`openssl rand -base64 32`) | signs upload sessions |
+| `STUDIO_ADMIN_PASSWORD` | a long passphrase, given only to the owner | saving prices at `/studio/admin/` (stored in the same bucket, `settings/pricing.json`) |
 
 **Nothing breaks if these are missing.** The endpoints return 503. The contact form
 then offers WhatsApp with the message already typed, and the Studio saves the proof
@@ -90,8 +91,9 @@ handoff smoother; it doesn't gate launching.
       10 MB+ PDF. Confirm the email arrives and every link downloads.
 - [ ] Share the preview URL on WhatsApp. The link preview shows the OG card.
 - [ ] Submit `https://www.eminenceprinting.co.za/sitemap.xml` in Google Search Console.
-- [ ] Replace the placeholder prices in `site/studio/js/pricing.js` with Eminence's,
-      and set `PRICES_CONFIRMED = true`. Until then every price says **Estimate**.
+- [ ] Eminence opens `/studio/admin/`, goes through every section, and presses
+      **Save prices**. Until then customers are charged the starter prices that
+      ship with the Studio (2026 KZN market levels, not Eminence's own).
 
 ## Known limits
 

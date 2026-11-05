@@ -16,17 +16,37 @@
 let seq = 1;
 export const uid = (p = "l") => p + Date.now().toString(36) + (seq++).toString(36);
 
+/* Grouped the way a brand designer browses: the streetwear and graffiti faces
+ * are the ones people make merch with. All Google Fonts (open licence, fine to
+ * print commercially); index.html loads their CSS, files download on first use. */
 export const FONTS = [
-  { family: "Archivo", label: "Archivo", weights: [400, 700, 900] },
-  { family: "Anton", label: "Anton", weights: [400] },
-  { family: "Bebas Neue", label: "Bebas Neue", weights: [400] },
-  { family: "Oswald", label: "Oswald", weights: [500, 700] },
-  { family: "Montserrat", label: "Montserrat", weights: [500, 800] },
-  { family: "Playfair Display", label: "Playfair", weights: [700, 900] },
-  { family: "Permanent Marker", label: "Marker", weights: [400] },
-  { family: "Pacifico", label: "Pacifico", weights: [400] },
-  { family: "Kalam", label: "Kalam", weights: [700] },
-  { family: "JetBrains Mono", label: "Mono", weights: [500, 800] },
+  { family: "Archivo", label: "Archivo", group: "Clean", weights: [400, 700, 900] },
+  { family: "Montserrat", label: "Montserrat", group: "Clean", weights: [500, 800] },
+  { family: "Oswald", label: "Oswald", group: "Clean", weights: [500, 700] },
+  { family: "Playfair Display", label: "Playfair", group: "Clean", weights: [700, 900] },
+  { family: "JetBrains Mono", label: "Mono", group: "Clean", weights: [500, 800] },
+  { family: "Anton", label: "Anton", group: "Streetwear", weights: [400] },
+  { family: "Bebas Neue", label: "Bebas Neue", group: "Streetwear", weights: [400] },
+  { family: "Archivo Black", label: "Archivo Black", group: "Streetwear", weights: [400] },
+  { family: "Bungee", label: "Bungee", group: "Streetwear", weights: [400] },
+  { family: "Black Ops One", label: "Black Ops (stencil)", group: "Streetwear", weights: [400] },
+  { family: "Rubik Mono One", label: "Rubik Mono", group: "Streetwear", weights: [400] },
+  { family: "Monoton", label: "Monoton (neon)", group: "Streetwear", weights: [400] },
+  { family: "UnifrakturMaguntia", label: "Blackletter", group: "Streetwear", weights: [400] },
+  { family: "Pirata One", label: "Pirata (gothic)", group: "Streetwear", weights: [400] },
+  { family: "Rubik Spray Paint", label: "Spray Paint", group: "Graffiti", weights: [400] },
+  { family: "Rubik Wet Paint", label: "Wet Paint (drip)", group: "Graffiti", weights: [400] },
+  { family: "Sedgwick Ave Display", label: "Sedgwick (tag)", group: "Graffiti", weights: [400] },
+  { family: "Permanent Marker", label: "Marker", group: "Graffiti", weights: [400] },
+  { family: "Rock Salt", label: "Rock Salt", group: "Graffiti", weights: [400] },
+  { family: "Knewave", label: "Knewave", group: "Graffiti", weights: [400] },
+  { family: "Bangers", label: "Bangers (comic)", group: "Graffiti", weights: [400] },
+  { family: "Rubik Glitch", label: "Glitch", group: "Graffiti", weights: [400] },
+  { family: "Pacifico", label: "Pacifico", group: "Script", weights: [400] },
+  { family: "Shrikhand", label: "Shrikhand", group: "Script", weights: [400] },
+  { family: "Lobster", label: "Lobster", group: "Script", weights: [400] },
+  { family: "Great Vibes", label: "Great Vibes", group: "Script", weights: [400] },
+  { family: "Kalam", label: "Kalam", group: "Script", weights: [700] },
 ];
 
 export function newTextLayer(surf, colour = "#14161A") {
@@ -87,7 +107,7 @@ export function carryOver(designs, fromProduct, toProduct, sizeOf) {
     const k = Math.min(b.w / a.w, b.h / a.h);
     out[s.id] = designs[srcId].map((l) => ({
       ...l, id: uid(), x: l.x * k, y: l.y * k,
-      ...(l.kind === "image" ? { w: l.w * k } : { size: l.size * k }),
+      ...(l.kind !== "text" ? { w: l.w * k } : { size: l.size * k }),
     }));
   }
   return out;

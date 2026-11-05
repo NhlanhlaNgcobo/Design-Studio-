@@ -53,9 +53,9 @@ function svgFor(ctx, view, outline) {
     case "garment": return garmentSvg({ fit: product.fit, colour, view, widthMm: size.w, areas: placements(ctx, view, outline), seed: 3 + product.fit.length * 7 });
     case "cap": return capSvg({ colour, areas: placements(ctx, view, outline) });
     case "tote": return toteSvg({ colour, areas: placements(ctx, view, outline) });
-    case "paper": return paperSvg({ product, size, tex: ctx.tex, active: outline ? (ctx.active ?? "front") : (view === "back" ? "back" : "front") });
-    case "banner": return bannerSvg({ product, size, tex: ctx.tex, active: !!active });
-    case "flag": return flagSvg({ size, tex: ctx.tex.face, active: !!active });
+    case "paper": return paperSvg({ product, size, tex: ctx.tex, active: outline ? (ctx.active ?? "front") : (view === "back" ? "back" : "front"), options: ctx.options, stock: ctx.stock });
+    case "banner": return bannerSvg({ product, size, tex: ctx.tex, active: !!active, colour, yaw: ctx.yaw });
+    case "flag": return flagSvg({ size, tex: ctx.tex.face, active: !!active, colour, yaw: ctx.yaw });
     case "shopfront": return shopfrontSvg({ size, tex: ctx.tex, colour, active: !!active, options: ctx.options });
     case "vehicle": {
       const surf = product.surfaces.find((s) => s.view === view) ?? product.surfaces[0];
@@ -78,8 +78,8 @@ export async function renderMockup(stage, ctx) {
   if (CANVAS_KINDS.has(product.render) || (GARMENT_KINDS.has(product.render) && blankFor(ctx.productId, view))) {
     let c = stage.querySelector("canvas.mock");
     if (!c) { stage.innerHTML = `<canvas class="mock" aria-label="Product preview"></canvas>`; c = stage.firstChild; lastSvgs.delete(stage); }
-    if (product.render === "gazebo") drawGazebo(c, { ...ctx, active: guides ? ctx.active : null });
-    else if (product.render === "mug") drawMug(c, { ...ctx, active: guides ? ctx.active : null });
+    if (product.render === "gazebo") drawGazebo(c, { ...ctx, frame: ctx.parts?.frame, editing: ctx.active, active: guides ? ctx.active : null });
+    else if (product.render === "mug") drawMug(c, { ...ctx, inside: ctx.parts?.inside, handle: ctx.parts?.handle, active: guides ? ctx.active : null });
     else await drawPhoto(c, blankFor(ctx.productId, view), { colour: ctx.colour, sizeChestMm: ctx.size.w, placements: placements(ctx, view, guides) });
     return;
   }
@@ -95,8 +95,8 @@ export async function renderMockup(stage, ctx) {
 export async function snapshotMockup(ctx, view, w, h) {
   const { product } = ctx;
   const c = document.createElement("canvas");
-  if (product.render === "gazebo") { c.width = w; c.height = h; drawGazebo(c, { ...ctx, active: null }, { w, h }); return c; }
-  if (product.render === "mug") { c.width = w; c.height = h; drawMug(c, { ...ctx, active: null }, { w, h }); return c; }
+  if (product.render === "gazebo") { c.width = w; c.height = h; drawGazebo(c, { ...ctx, frame: ctx.parts?.frame, editing: null, active: null }, { w, h }); return c; }
+  if (product.render === "mug") { c.width = w; c.height = h; drawMug(c, { ...ctx, inside: ctx.parts?.inside, handle: ctx.parts?.handle, active: null }, { w, h }); return c; }
   const blank = GARMENT_KINDS.has(product.render) && blankFor(ctx.productId, view);
   if (blank) {
     const p = document.createElement("canvas");

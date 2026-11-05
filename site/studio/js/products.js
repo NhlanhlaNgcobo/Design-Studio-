@@ -32,6 +32,21 @@ const LIGHT_POLY = [
   { hex: "#FFFFFF", name: "White" }, { hex: "#F3F1EC", name: "Off-white" },
 ];
 const STOCK_WHITE = [{ hex: "#FFFFFF", name: "White stock" }];
+/* Glazes for a two-tone mug's inside and handle. */
+const MUG_GLAZE = [
+  { hex: "#FFFFFF", name: "White" }, { hex: "#111111", name: "Black" }, { hex: "#B3202A", name: "Red" },
+  { hex: "#1F4FA0", name: "Royal" }, { hex: "#1C2541", name: "Navy" }, { hex: "#F2B705", name: "Yellow" },
+  { hex: "#E8650F", name: "Orange" }, { hex: "#F2B8C6", name: "Pink" }, { hex: "#1E5631", name: "Green" },
+  { hex: "#8EC5E8", name: "Sky blue" },
+];
+/* Printed display goods: the "colour" is the background printed edge to edge
+ * behind the design — the quickest way to a branded banner. */
+const PRINT_BG = [
+  { hex: "#FFFFFF", name: "White" }, { hex: "#111111", name: "Black" }, { hex: "#1C2541", name: "Navy" },
+  { hex: "#1F4FA0", name: "Royal" }, { hex: "#B3202A", name: "Red" }, { hex: "#1E5631", name: "Green" },
+  { hex: "#F2B705", name: "Gold" }, { hex: "#E8650F", name: "Orange" }, { hex: "#C4006B", name: "Magenta" },
+  { hex: "#00A0E3", name: "Cyan" }, { hex: "#6A1F2B", name: "Maroon" }, { hex: "#9EA2A5", name: "Grey" },
+];
 
 /* Sizes for a garment carry the chest width, which is what a print area is
  * measured against. They are flat measurements of a laid-out garment. */
@@ -149,23 +164,51 @@ export const PRODUCTS = {
     minDpi: 200, lead: "2–3 working days",
     processes: ["sublimation"],
     sizes: [{ id: "330", label: "330 ml (11 oz)", w: 82 }],
-    // White body only for sublimation; the colour is the inner glaze and handle.
-    colours: [{ hex: "#FFFFFF", name: "All white" }, { hex: "#111111", name: "Black inside" }, { hex: "#B3202A", name: "Red inside" }, { hex: "#1F4FA0", name: "Blue inside" }, { hex: "#F2B705", name: "Yellow inside" }],
+    // Three colours, chosen apart: the outside (the whole body, rim to base),
+    // the inside and the handle. The outside colour also goes into the print
+    // file as the background of the wrap.
+    printedBase: true, colours: PRINT_BG,
+    parts: [
+      { id: "inside", label: "Inside", colours: MUG_GLAZE },
+      { id: "handle", label: "Handle", colours: MUG_GLAZE },
+    ],
     surfaces: [{ id: "wrap", label: "Wrap-around", view: "front", w: 200, h: 82, wrap: true }],
   },
 
   /* ───────────────────────────── print ───────────────────────────── */
   cards: {
-    name: "Business cards", group: "Print", render: "paper", kind: "card",
+    name: "Business cards", group: "Print", render: "paper", kind: "card", details: "card",
     blurb: "90 × 50 mm, 350 g matt or gloss",
     minDpi: 300, lead: "2–3 working days",
     processes: ["digital"],
     stocks: ["350 g matt", "350 g gloss", "350 g matt + soft-touch"],
     sizes: [{ id: "90x50", label: "90 × 50 mm (SA standard)", w: 90, h: 50 }],
     colours: STOCK_WHITE, qtyTiers: [100, 250, 500, 1000, 2000],
+    options: [{ id: "rounded", label: "Rounded corners (3 mm)", default: false }],
     surfaces: [
       { id: "front", label: "Front", view: "front", bleedMm: 3, safeMm: 4, fullBleed: true },
       { id: "back", label: "Back", view: "back", bleedMm: 3, safeMm: 4, fullBleed: true },
+    ],
+  },
+  /* Welcome cards: guesthouse room cards (Wi-Fi, house rules, a QR to the
+   * guest guide) and e-commerce thank-you inserts. A6 is the norm; DL, A5,
+   * square and business-card size are the usual alternatives. */
+  welcome: {
+    name: "Welcome cards", group: "Print", render: "paper", kind: "card", details: "welcome",
+    blurb: "Guest room and thank-you cards, 350 g",
+    minDpi: 300, lead: "2–3 working days",
+    processes: ["digital"],
+    stocks: ["350 g matt", "350 g gloss", "350 g matt + soft-touch"],
+    sizes: [
+      { id: "A6", label: "A6 · 105 × 148", w: 105, h: 148 }, { id: "DL", label: "DL · 99 × 210", w: 99, h: 210 },
+      { id: "A5", label: "A5 · 148 × 210", w: 148, h: 210 }, { id: "SQ", label: "Square · 148 × 148", w: 148, h: 148 },
+      { id: "mini", label: "Mini · 90 × 50 (insert)", w: 90, h: 50 },
+    ],
+    colours: STOCK_WHITE, qtyTiers: [25, 50, 100, 250, 500, 1000],
+    options: [{ id: "rounded", label: "Rounded corners (3 mm)", default: false }],
+    surfaces: [
+      { id: "front", label: "Front", view: "front", bleedMm: 3, safeMm: 5, fullBleed: true },
+      { id: "back", label: "Back", view: "back", bleedMm: 3, safeMm: 5, fullBleed: true },
     ],
   },
   flyer: {
@@ -199,7 +242,7 @@ export const PRODUCTS = {
     minDpi: 120, lead: "2–4 working days",
     processes: ["largeformat"],
     sizes: [{ id: "850x2000", label: "850 × 2000 mm", w: 850, h: 2000 }, { id: "1000x2000", label: "1000 × 2000 mm", w: 1000, h: 2000 }, { id: "1200x2000", label: "1200 × 2000 mm", w: 1200, h: 2000 }],
-    colours: STOCK_WHITE, qtyTiers: [1, 2, 5, 10],
+    printedBase: true, colours: PRINT_BG, qtyTiers: [1, 2, 5, 10],
     // The bottom 100 mm rolls into the base cassette and is never seen.
     surfaces: [{ id: "face", label: "Banner face", view: "front", bleedMm: 0, safeMm: 40, fullBleed: true, hiddenBottomMm: 100 }],
   },
@@ -209,7 +252,7 @@ export const PRODUCTS = {
     minDpi: 72, lead: "1–3 working days",
     processes: ["largeformat"],
     sizes: [{ id: "2000x1000", label: "2 × 1 m", w: 2000, h: 1000 }, { id: "3000x1000", label: "3 × 1 m", w: 3000, h: 1000 }, { id: "3000x1500", label: "3 × 1.5 m", w: 3000, h: 1500 }, { id: "6000x1000", label: "6 × 1 m", w: 6000, h: 1000 }],
-    colours: STOCK_WHITE, qtyTiers: [1, 2, 5, 10],
+    printedBase: true, colours: PRINT_BG, qtyTiers: [1, 2, 5, 10],
     surfaces: [{ id: "face", label: "Banner face", view: "front", bleedMm: 0, safeMm: 50, fullBleed: true }],
   },
   correx: {
@@ -218,7 +261,7 @@ export const PRODUCTS = {
     minDpi: 100, lead: "1–3 working days",
     processes: ["largeformat"],
     sizes: [{ id: "600x450", label: "600 × 450 mm", w: 600, h: 450 }, { id: "900x600", label: "900 × 600 mm", w: 900, h: 600 }, { id: "1200x900", label: "1200 × 900 mm", w: 1200, h: 900 }, { id: "2400x1200", label: "2400 × 1200 mm", w: 2400, h: 1200 }],
-    colours: STOCK_WHITE, qtyTiers: [1, 5, 10, 25, 50, 100],
+    printedBase: true, colours: PRINT_BG, qtyTiers: [1, 5, 10, 25, 50, 100],
     surfaces: [{ id: "face", label: "Sign face", view: "front", bleedMm: 0, safeMm: 20, fullBleed: true }],
   },
   flag: {
@@ -227,7 +270,7 @@ export const PRODUCTS = {
     minDpi: 100, lead: "3–5 working days",
     processes: ["sublimfabric"],
     sizes: [{ id: "S", label: "Small · 2.2 m", w: 700, h: 1700 }, { id: "M", label: "Medium · 2.8 m", w: 850, h: 2300 }, { id: "L", label: "Large · 3.4 m", w: 1000, h: 2900 }],
-    colours: STOCK_WHITE, qtyTiers: [1, 2, 4, 10],
+    printedBase: true, colours: PRINT_BG, qtyTiers: [1, 2, 4, 10],
     surfaces: [{ id: "face", label: "Flag", view: "front", shape: "teardrop", bleedMm: 0, safeMm: 60, fullBleed: true }],
   },
   /* ───────────────────────── vehicles & signage ─────────────────────────
@@ -270,6 +313,9 @@ export const PRODUCTS = {
     sizes: [{ id: "3x3", label: "3 × 3 m", w: 3000, d: 3000, legH: 2100 }, { id: "4.5x3", label: "4.5 × 3 m", w: 4500, d: 3000, legH: 2100 }, { id: "6x3", label: "6 × 3 m", w: 6000, d: 3000, legH: 2100 }],
     colours: [{ hex: "#FFFFFF", name: "White" }, { hex: "#111111", name: "Black" }, { hex: "#1F4FA0", name: "Royal" }, { hex: "#B3202A", name: "Red" }, { hex: "#1E5631", name: "Green" }, { hex: "#F2B705", name: "Gold" }, { hex: "#1C2541", name: "Navy" }],
     qtyTiers: [1, 2, 3, 5],
+    // The frame is a separate choice from the canopy fabric.
+    parts: [{ id: "frame", label: "Frame", colours: [{ hex: "#C9CDD2", name: "Silver" }, { hex: "#1A1C20", name: "Black" }, { hex: "#F2F2F2", name: "White" }] }],
+    printedBase: true,                       // the canopy colour is printed, so it is in the print file
     // Most gazebos are printed the same on opposite sides. On by default; off
     // means the back and far side stay plain.
     options: [{ id: "repeat", label: "Repeat front & side designs on the back and far side", default: true }],
@@ -280,6 +326,8 @@ export const PRODUCTS = {
       { id: "valance-front", label: "Valance — front", view: "3d", part: "valance", side: "front" },
       { id: "valance-side", label: "Valance — side", view: "3d", part: "valance", side: "side" },
       { id: "wall-back", label: "Back wall", view: "3d", part: "wall", side: "back", optional: true },
+      { id: "wall-left", label: "Left wall", view: "3d", part: "wall", side: "left", optional: true },
+      { id: "wall-right", label: "Right wall", view: "3d", part: "wall", side: "right", optional: true },
     ],
   },
 };
@@ -308,7 +356,7 @@ export function surfaceSize(product, sizeOpt, surf) {
     if (surf.part === "canopy")
       return { w: span, h: Math.round(Math.hypot(run / 2, Math.min(sizeOpt.w, sizeOpt.d) * ROOF_RISE)) };
     if (surf.part === "valance") return { w: span, h: VALANCE_MM };
-    return { w: sizeOpt.w, h: sizeOpt.legH - VALANCE_MM };
+    return { w: surf.side === "back" ? sizeOpt.w : sizeOpt.d, h: sizeOpt.legH - VALANCE_MM };
   }
   return { w: sizeOpt.w, h: sizeOpt.h };
 }
@@ -320,6 +368,36 @@ export function surfaceSize(product, sizeOpt, surf) {
  * the width it is printed at. Scaling a 400 px logo across a 1.5 m panel does
  * not create detail — this is what tells the customer before they pay.
  */
+/* ISO 216 paper sizes. Customers, and print shops, talk about a print as "an
+ * A4 on the back" — so every placed design is also described this way. */
+export const PAPER = [
+  ["A7", 74, 105], ["A6", 105, 148], ["A5", 148, 210], ["A4", 210, 297],
+  ["A3", 297, 420], ["A2", 420, 594], ["A1", 594, 841], ["A0", 841, 1189],
+];
+const fitsIn = (w, h, pw, ph, tol = 1.02) => (w <= pw * tol && h <= ph * tol) || (w <= ph * tol && h <= pw * tol);
+
+/** The smallest A size a w × h mm print fits on, e.g. "A4"; null if over A0. */
+export function paperFor(w, h) {
+  return PAPER.find(([, pw, ph]) => fitsIn(w, h, pw, ph))?.[0] ?? null;
+}
+
+/** The biggest A size that fits inside a print area, e.g. "A4"; null if under A7. */
+export function largestPaperIn(w, h) {
+  return [...PAPER].reverse().find(([, pw, ph]) => fitsIn(pw, ph, w, h, 1))?.[0] ?? null;
+}
+
+/**
+ * Scale factor that makes a w × h design fill paper `name`, turned the same
+ * way as the design (a wide logo gets a landscape sheet). null when that
+ * doesn't fit the print area — an "A4" that isn't A4 would mislead.
+ */
+export function scaleToPaper(w, h, name, areaW = Infinity, areaH = Infinity) {
+  const [, a, b] = PAPER.find(([n]) => n === name);
+  const [pw, ph] = w >= h ? [b, a] : [a, b];
+  const k = Math.min(pw / w, ph / h);
+  return w * k <= areaW * 1.001 && h * k <= areaH * 1.001 ? k : null;
+}
+
 export function effectiveDpi(naturalPx, placedWidthMm) {
   if (!naturalPx || !placedWidthMm) return 0;
   return Math.round(naturalPx / (placedWidthMm / 25.4));

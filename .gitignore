@@ -8,3 +8,8 @@ desktop.ini
 # Build tooling
 build/node_modules/
 build/.outbox/
+
+# Purchased mockup packs: licence forbids redistribution (only derived blanks are published)
+*.zip
+*.psd
+Files-Extraction-Guide-ZIP-RAR*.pdf

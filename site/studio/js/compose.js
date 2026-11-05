@@ -9,6 +9,8 @@
  * y pointing down (canvas convention). Layers store their CENTRE.
  */
 
+import qrcode from "../vendor/qrcode.js";
+
 const measurer = document.createElement("canvas").getContext("2d");
 
 export const fontCss = (l, px) => `${l.italic ? "italic " : ""}${l.weight} ${px}px "${l.font}"`;
@@ -16,6 +18,8 @@ const LINE = 1.12;
 
 /** Unrotated size of a layer in mm. */
 export function layerSize(l, assets) {
+  if (l.kind === "shape") return { w: l.w, h: l.w * l.ar };
+  if (l.kind === "qr") return { w: l.w, h: l.w };
   if (l.kind === "image") {
     const a = assets.get(l.assetId);
     const sw = a?.source ? (a.source.naturalWidth || a.source.width) : 1;
@@ -75,8 +79,50 @@ export function drawLayer(g, l, assets, pxPerMm) {
       g.imageSmoothingQuality = "high";
       g.drawImage(a.source, -w / 2, -h / 2, w, h);
     }
-  } else drawText(g, l, pxPerMm);
+  } else if (l.kind === "shape") drawShape(g, l);
+  else if (l.kind === "qr") drawQr(g, l);
+  else drawText(g, l, pxPerMm);
   g.restore();
+}
+
+/** Scaling by width (images, shapes, QR codes) or by font size (text). */
+export const scalesByWidth = (l) => l.kind !== "text";
+
+/* Shapes: a background, a colour band, a line, a circle — the furniture of a
+ * business card. Stored as width + aspect, so a corner drag keeps proportion
+ * and the inspector sets width and height separately. */
+function drawShape(g, l) {
+  const w = l.w, h = l.w * l.ar;
+  g.fillStyle = l.fill;
+  g.beginPath();
+  if (l.shape === "ellipse") g.ellipse(0, 0, w / 2, h / 2, 0, 0, Math.PI * 2);
+  else if (g.roundRect && l.radius) g.roundRect(-w / 2, -h / 2, w, h, Math.min(l.radius, w / 2, h / 2));
+  else g.rect(-w / 2, -h / 2, w, h);
+  g.fill();
+}
+
+/* QR codes are drawn module by module as filled squares, so they stay vector-
+ * sharp at print size. A quiet zone is part of the layer's size. */
+const qrCache = new Map();
+export function qrModules(data) {
+  const key = String(data || " ");
+  if (!qrCache.has(key)) {
+    const q = qrcode(0, "M"); q.addData(key); q.make();
+    const n = q.getModuleCount(), m = [];
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) m.push([c, r]);
+    if (qrCache.size > 50) qrCache.clear();
+    qrCache.set(key, { n, m });
+  }
+  return qrCache.get(key);
+}
+function drawQr(g, l) {
+  const { n, m } = qrModules(l.data);
+  const quiet = 2, cell = l.w / (n + quiet * 2), o = -l.w / 2 + quiet * cell;
+  if (l.bg) { g.fillStyle = l.bg; g.fillRect(-l.w / 2, -l.w / 2, l.w, l.w); }
+  g.fillStyle = l.colour;
+  g.beginPath();
+  for (const [c, r] of m) g.rect(o + c * cell - 0.002, o + r * cell - 0.002, cell + 0.004, cell + 0.004);
+  g.fill();
 }
 
 /*
@@ -132,12 +178,13 @@ function drawText(g, l, pxPerMm) {
  * Render a surface's design to its own canvas, at trim size.
  * This is the texture the mockups wrap onto their products.
  */
-export function composeSurface(layers, assets, area, maxPx = 1024) {
+export function composeSurface(layers, assets, area, maxPx = 1024, background = null) {
   const k = Math.min(maxPx / area.w, maxPx / area.h);
   const c = document.createElement("canvas");
   c.width = Math.max(1, Math.round(area.w * k));
   c.height = Math.max(1, Math.round(area.h * k));
   const g = c.getContext("2d");
+  if (background) { g.fillStyle = background; g.fillRect(0, 0, c.width, c.height); }
   g.setTransform(k, 0, 0, k, c.width / 2, c.height / 2);
   for (const l of layers || []) drawLayer(g, l, assets, k);
   return c;
