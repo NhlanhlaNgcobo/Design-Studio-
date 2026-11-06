@@ -387,11 +387,11 @@ kbd { font-family: var(--f-mono); font-size: .7rem; border: 1px solid var(--line
  .catalog-dialog h2 { font-size:22px; } .tool span { display:inline; }
 }
 @media(prefers-reduced-motion:reduce) { *,*::before,*::after { animation:none!important; transition:none!important; } }
-.is-embedded .bar-wa,.is-embedded .brand { display:none; }
+.is-embedded .brand, .is-cart .bar-wa { display:none; }
 .is-embedded .bar-tools { margin-left:0; }
 .is-embedded #sendTop { margin-left:auto; }
-.is-embedded .panel-preview>.fine { font-size:0; }
-.is-embedded .panel-preview>.fine::after { content:'Continue in the store to confirm your order. Prices shown here are estimates.'; font-size:11px; }
+.is-cart .panel-preview>.fine:not(.powered) { font-size:0; }
+.is-cart .panel-preview>.fine:not(.powered)::after { content:'Continue in the store to confirm your order and pay.'; font-size:11px; }
 
 /* Editing on the garment colour: the backdrop is a softened version of the
    chosen colour, the print area itself is the exact colour. */
@@ -440,3 +440,39 @@ kbd { font-family: var(--f-mono); font-size: .7rem; border: 1px solid var(--line
 .add-more .tool { flex-direction: column; justify-content: center; gap: 3px; min-width: 0; padding: 7px 4px; border: 1px solid var(--line); border-radius: 8px; font-size: .72rem; }
 .add-more .tool span { display: inline !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .add-more .tool svg { width: 18px; height: 18px; }
+
+/* White-label */
+.brand-logo { height: 30px; width: auto; max-width: 140px; object-fit: contain; }
+.fine.powered { margin-top: 2px; opacity: .75; }
+.fine.powered a { color: inherit; }
+
+/* Background removal */
+.bg-tools { margin: 10px 0 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.bg-head { display: flex; align-items: baseline; gap: 8px; font-size: .82rem; }
+.bg-head span { color: var(--ok); font-size: .76rem; }
+.bg-head .link-btn { margin-left: auto; font-size: .76rem; }
+.bg-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
+.bg-btns .btn { white-space: normal; line-height: 1.2; padding: 7px 8px; }
+.bg-strength { display: flex; flex-direction: column; gap: 3px; margin-top: 8px; font-size: .76rem; font-weight: 600; }
+.bg-note { margin: 8px 0 0; font-size: .72rem; color: var(--muted); }
+
+/* Layer stacking */
+.layer-row { display: flex; align-items: center; gap: 4px; border-radius: 7px; }
+.layer-row .layer-item { flex: 1; min-width: 0; margin: 4px 0; }
+.layer-row.dragging { opacity: .45; }
+.layer-row.drop-before { box-shadow: 0 -2px 0 var(--magenta-ink); }
+.layer-row.drop-after { box-shadow: 0 2px 0 var(--magenta-ink); }
+.layer-move { display: flex; flex-direction: column; gap: 2px; }
+.layer-move button { border: 1px solid var(--line); background: #fff; border-radius: 4px; width: 24px; height: 18px; font-size: 9px; line-height: 1; cursor: pointer; color: var(--ink); }
+.layer-move button:disabled { opacity: .3; cursor: default; }
+.layer-ends { margin: 2px 0; font: 600 10px/1 var(--f-mono, monospace); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.layer-row[draggable="true"] { cursor: grab; }
+
+/* Moving the print area on the garment */
+.place-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 10px 0 0; font-size: .8rem; }
+.place-tools #placeInfo { font-weight: 600; }
+.place-tools .nudge { display: inline-flex; gap: 3px; }
+.place-tools .nudge button { width: 28px; height: 26px; border: 1px solid var(--line-2); background: #fff; border-radius: 6px; cursor: pointer; font-size: 10px; color: var(--ink); }
+.place-tools .nudge button:hover { border-color: var(--ink); }
+.place-tip { color: var(--muted); font-size: .74rem; }
+.stage.moving { cursor: grabbing; }

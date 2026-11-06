@@ -1,0 +1,8 @@
+{
+  "default": "eminence",
+  "hosts": {
+    "www.eminenceprinting.co.za": "eminence",
+    "eminenceprinting.co.za": "eminence",
+    "studio.eminenceprinting.co.za": "eminence"
+  }
+}

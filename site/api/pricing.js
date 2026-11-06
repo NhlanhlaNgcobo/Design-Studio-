@@ -1,14 +1,14 @@
-/* /api/pricing — the store owner's prices.
+/* /api/pricing?tenant=<shop> — a shop's prices.
  *
  *   GET   → { prices, updated }   the saved prices (prices: null if none yet,
  *                                 and the Studio uses its starter set)
  *   PUT   { prices }              save; needs "Authorization: Bearer <password>"
  *         → { ok, updated }
  *
- * The password is STUDIO_ADMIN_PASSWORD. Prices are stored as one JSON object
- * in the same bucket as the orders (settings/pricing.json), so there is no
- * database to run. Every value is checked against the shape of the starter
- * prices: a typo in the settings page can't put "abc" into a quote.
+ * Each shop has its own prices and its own admin password (api/_lib/tenant.js).
+ * Prices are one JSON object in the order bucket — tenants/<shop>/pricing.json —
+ * so there is no database to run. Every value is checked against the shape of
+ * the starter prices: a typo in the settings page can't put "abc" into a quote.
  *
  *   401 wrong password · 429 too many attempts · 400 invalid · 503 not set up
  */
@@ -16,11 +16,13 @@ import crypto from "node:crypto";
 import { send, readJson, limited } from "./_lib/guard.js";
 import { storageFromEnv, objectUrl } from "./_lib/s3.js";
 import { DEFAULT_PRICES } from "../studio/js/pricing.js";
-
-const KEY = "settings/pricing.json";
+import { tenantFor, adminPassword, storagePrefix } from "./_lib/tenant.js";
 
 export default async function handler(req, res) {
   const store = storageFromEnv();
+  const tenant = await tenantFor(new URL(req.url, "http://x").searchParams.get("tenant"));
+  if (!tenant) return send(res, 404, { error: "Unknown shop." });
+  const KEY = `${storagePrefix(tenant)}/pricing.json`;
   if (req.method === "GET") {
     if (!store) return send(res, 200, { prices: null });
     const r = await fetch(objectUrl(store, KEY, "GET", 60));
@@ -30,8 +32,8 @@ export default async function handler(req, res) {
   }
   if (req.method !== "PUT") return send(res, 405, { error: "GET or PUT" });
 
-  const password = process.env.STUDIO_ADMIN_PASSWORD;
-  if (!store || !password) return send(res, 503, { error: "Price settings are not configured yet (storage and STUDIO_ADMIN_PASSWORD)." });
+  const password = adminPassword(tenant);
+  if (!store || !password) return send(res, 503, { error: `Price settings are not configured for ${tenant.name} yet (storage and an admin password).` });
   if (limited(req, "pricing", 30)) return send(res, 429, { error: "Too many attempts — try again in an hour." });
   const given = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
   const a = crypto.createHash("sha256").update(given).digest(), b = crypto.createHash("sha256").update(password).digest();

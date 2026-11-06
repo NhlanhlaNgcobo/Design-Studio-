@@ -177,13 +177,14 @@ export function defs(id, seed) {
  */
 function placement(p, upm, warpId) {
   const w = p.wMm * upm, h = p.hMm * upm;
-  const { cx, cy, rot = 0 } = p.area;
+  // Moved by the customer from the standard position, in mm (see moveLimits).
+  const cx = p.area.cx + (p.dx || 0) * upm, cy = p.area.cy + (p.dy || 0) * upm, rot = p.area.rot || 0;
   const t = `rotate(${rot} ${cx} ${cy})`;
   const img = p.tex
     ? `<g filter="url(#${warpId})"><image href="${esc(p.tex)}" x="${cx - w / 2}" y="${cy - h / 2}" width="${w}" height="${h}" preserveAspectRatio="none" transform="${t}"/></g>`
     : "";
   const box = p.outline
-    ? `<rect class="ui-only" x="${cx - w / 2}" y="${cy - h / 2}" width="${w}" height="${h}" rx="4" transform="${t}"
+    ? `<rect class="ui-only" data-sf="${esc(p.surfaceId)}" data-hmm="${p.hMm}" x="${cx - w / 2}" y="${cy - h / 2}" width="${w}" height="${h}" rx="4" transform="${t}"
          fill="none" stroke="#E5007E" stroke-opacity=".8" stroke-width="3" stroke-dasharray="12 9"/>`
     : "";
   return { img, box };

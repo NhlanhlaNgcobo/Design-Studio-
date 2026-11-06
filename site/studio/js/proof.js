@@ -20,6 +20,7 @@ import { PROCESSES, surfaceSize, effectiveDpi, dpiVerdict, paperFor } from "./pr
 import { layerSize, composeSurface, designBounds } from "./compose.js";
 import { snapshotMockup, viewsWithDesign } from "./render/index.js";
 import { rand, rand2 } from "./pricing.js";
+import { TENANT } from "./tenant.js";
 
 export function jobRef() {
   const d = new Date();
@@ -37,6 +38,8 @@ export function buildSpec(m) {
     return {
       surface: s.id, label: s.label,
       print_area_mm: [Math.round(area.w), Math.round(area.h)],
+      // Where the area sits, against the standard placement: + is right / lower.
+      position_offset_mm: state.offsets?.[s.id] ? { right: state.offsets[s.id].dx || 0, down: state.offsets[s.id].dy || 0 } : null,
       bleed_mm: s.bleedMm || 0,
       design_bounds_mm: b && { left: r1(b.x0 + area.w / 2), top: r1(b.y0 + area.h / 2), width: r1(b.w), height: r1(b.h) },
       layers: state.designs[s.id].map((l) => {
@@ -88,9 +91,9 @@ export async function renderProof(m, dataTex) {
   g.fillStyle = INK; g.fillRect(0, 0, W, 120);
   [CYAN, MAG, YEL, "#FFFFFF"].forEach((col, i) => { g.fillStyle = col; g.beginPath(); g.arc(70 + i * 30, 60, 11, 0, Math.PI * 2); g.fill(); });
   g.fillStyle = "#fff"; g.font = "800 40px Archivo, sans-serif"; g.textBaseline = "middle";
-  g.fillText("Eminence Printing", 200, 52);
+  g.fillText(TENANT.name, 200, 52);
   g.font = "500 22px 'JetBrains Mono', monospace"; g.fillStyle = "rgba(255,255,255,.7)";
-  g.fillText("DESIGN PROOF  ·  078 935 6433  ·  eminenceprinting@gmail.com", 200, 88);
+  g.fillText(["DESIGN PROOF", TENANT.phoneDisplay, TENANT.email].filter(Boolean).join("  ·  "), 200, 88);
   g.textAlign = "right"; g.fillStyle = "#fff"; g.font = "700 34px 'JetBrains Mono', monospace";
   g.fillText(spec.ref, W - 60, 50);
   g.font = "500 20px 'JetBrains Mono', monospace"; g.fillStyle = "rgba(255,255,255,.7)";
@@ -207,7 +210,7 @@ export async function renderProof(m, dataTex) {
   g.fillStyle = "#fff"; g.font = "600 20px Archivo, sans-serif"; g.textBaseline = "middle";
   g.fillText("Approved by  ________________________     Date  __________", 60, H - 35);
   g.textAlign = "right"; g.font = "500 18px 'JetBrains Mono', monospace"; g.fillStyle = "rgba(255,255,255,.7)";
-  g.fillText("eminenceprinting.co.za/studio", W - 60, H - 35);
+  g.fillText(TENANT.studioUrl || TENANT.home, W - 60, H - 35);
   return c;
 }
 

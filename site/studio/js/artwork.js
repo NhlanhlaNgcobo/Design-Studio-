@@ -184,11 +184,35 @@ function edgeIsFlat(d, w, h) {
  * Swap in the background-free version and re-count its inks, so a black logo
  * that arrived on a white box is priced as one colour, not two.
  */
-export function applyBackgroundRemoval(asset) {
-  if (asset.bgRemoved) return asset;
-  asset.original = asset.source;
-  asset.source = removeBackground(asset);
-  asset.bgRemoved = true;
+/** Solid-colour removal; call again with another tolerance to redo it from the original. */
+export function applyBackgroundRemoval(asset, tolerance = 34) {
+  if (!asset.bgRemoved) asset.original = asset.source;
+  asset.source = removeBackground(asset, tolerance);
+  asset.bgRemoved = true; asset.bgMethod = "solid"; asset.bgTolerance = tolerance;
+  analyse(asset);
+  asset.whiteBox = false;
+  return asset;
+}
+
+/**
+ * AI removal for photos and busy backgrounds (aibg.js). Works on the original
+ * at up to 3000 px, so the cut-out stays sharp at print size.
+ */
+export async function aiBackgroundRemoval(asset) {
+  const { subjectMask } = await import("./aibg.js");
+  const src = asset.original ?? asset.source;
+  const W0 = src.naturalWidth || src.width, H0 = src.naturalHeight || src.height;
+  const k = Math.min(1, 3000 / Math.max(W0, H0));
+  const w = Math.round(W0 * k), h = Math.round(H0 * k);
+  const mask = await subjectMask(src, w, h);
+  const c = document.createElement("canvas"); c.width = w; c.height = h;
+  const g = c.getContext("2d");
+  g.drawImage(src, 0, 0, w, h);
+  g.globalCompositeOperation = "destination-in";
+  g.drawImage(mask, 0, 0);
+  if (!asset.bgRemoved) asset.original = asset.source;
+  asset.source = c;
+  asset.bgRemoved = true; asset.bgMethod = "ai";
   analyse(asset);
   asset.whiteBox = false;
   return asset;
@@ -197,7 +221,7 @@ export function applyBackgroundRemoval(asset) {
 export function restoreBackground(asset) {
   if (!asset.bgRemoved) return asset;
   asset.source = asset.original;
-  asset.bgRemoved = false;
+  asset.bgRemoved = false; asset.bgMethod = null;
   analyse(asset);
   return asset;
 }

@@ -1,0 +1,17 @@
+{
+  "id": "eminence",
+  "name": "Eminence Printing",
+  "shortName": "Eminence",
+  "tagline": "Design Studio",
+  "logo": null,
+  "home": "https://www.eminenceprinting.co.za/",
+  "studioUrl": "eminenceprinting.co.za/studio",
+  "whatsapp": "27789356433",
+  "phoneDisplay": "078 935 6433",
+  "email": "eminenceprinting@gmail.com",
+  "location": "Empangeni",
+  "collectLabel": "Collect in Empangeni",
+  "theme": { "primary": "#C4006B", "accent": "#00A0E3", "ink": "#14161A" },
+  "products": null,
+  "poweredBy": { "name": "MiraiStack", "url": "" }
+}

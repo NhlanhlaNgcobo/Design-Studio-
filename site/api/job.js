@@ -22,6 +22,7 @@ import crypto from "node:crypto";
 import { send, readJson, limited, signToken, readToken, sniff, ACCEPTS, safeName, ext, clean, escHtml } from "./_lib/guard.js";
 import { storageFromEnv, objectUrl } from "./_lib/s3.js";
 import { sendMail, mailConfigured } from "./_lib/mail.js";
+import { tenantFor, storagePrefix, inboxOf } from "./_lib/tenant.js";
 
 const LIMITS = { artwork: 40 * 1024 * 1024, print: 120 * 1024 * 1024, proof: 12 * 1024 * 1024, spec: 1024 * 1024 };
 const MAX_FILES = 24;
@@ -37,9 +38,11 @@ export default async function handler(req, res) {
   let d;
   try { d = await readJson(req, 512 * 1024); } catch (e) { return send(res, e.status || 400, { error: "Bad request" }); }
   if (!REF.test(d.ref || "")) return send(res, 400, { error: "Bad job reference." });
+  const tenant = await tenantFor(d.tenant);
+  if (!tenant) return send(res, 400, { error: "Unknown shop." });
 
   try {
-    if (d.step === "start") return await start(d, req, res, store, secret);
+    if (d.step === "start") return await start(d, req, res, store, secret, tenant);
     if (d.step === "complete") return await complete(d, req, res, store, secret);
     return send(res, 400, { error: "Unknown step." });
   } catch (e) {
@@ -48,19 +51,20 @@ export default async function handler(req, res) {
   }
 }
 
-async function start(d, req, res, store, secret) {
+async function start(d, req, res, store, secret, tenant) {
   if (limited(req, "job-start", 10)) return send(res, 429, { error: "Too many uploads from here — please WhatsApp us." });
   const files = Array.isArray(d.files) ? d.files : [];
   if (!files.length || files.length > MAX_FILES) return send(res, 400, { error: "Wrong number of files." });
 
-  // Filed by customer — WhatsApp number + name — so every order a customer
-  // ever sends sits together:
-  //   customers/27821234567-sipho-dlamini/customer.json
-  //   customers/27821234567-sipho-dlamini/EP-…-<random>/{print,artwork,proof}/…
+  // Filed by shop, then by customer — WhatsApp number + name — so every order
+  // a customer ever sends sits together:
+  //   tenants/eminence/customers/27821234567-sipho-dlamini/customer.json
+  //   tenants/eminence/customers/27821234567-sipho-dlamini/EP-…-<random>/{print,artwork,proof}/…
   // The job folder keeps an unguessable suffix: customer artwork is somebody's
   // brand asset, and must not be findable by guessing a job number.
   const customer = customerId(d.spec?.customer);
-  const folder = `customers/${customer}/${d.ref}-${crypto.randomBytes(9).toString("base64url")}`;
+  const base = `${storagePrefix(tenant)}/customers/${customer}`;
+  const folder = `${base}/${d.ref}-${crypto.randomBytes(9).toString("base64url")}`;
   const uploads = {}, keys = [];
   for (const f of files) {
     const role = ["artwork", "print", "proof", "spec"].includes(f.role) ? f.role : null;
@@ -80,13 +84,15 @@ async function start(d, req, res, store, secret) {
   const put = await fetch(objectUrl(store, specKey, "PUT", 300), { method: "PUT", body: specText, headers: { "Content-Type": "application/json" } });
   if (!put.ok) throw Object.assign(new Error(`spec put ${put.status}`), { status: 502 });
 
-  const token = signToken({ ref: d.ref, folder, customer, keys, specKey }, secret, 3600);
+  const token = signToken({ ref: d.ref, tenant: tenant.id, folder, base, customer, keys, specKey }, secret, 3600);
   return send(res, 200, { uploads, token });
 }
 
 async function complete(d, req, res, store, secret) {
   const t = readToken(d.token, secret);
   if (!t || t.ref !== d.ref) return send(res, 403, { error: "Upload session expired — please send again." });
+  const tenant = await tenantFor(t.tenant);          // from the signed token, not the request
+  if (!tenant) return send(res, 400, { error: "Unknown shop." });
 
   // Verify each object: present, within its limit, and really the type it claims.
   const checked = [];
@@ -141,10 +147,11 @@ async function complete(d, req, res, store, secret) {
       ${proof ? `<li><a href="${proof.url}">Proof sheet</a></li>` : ""}
       <li><a href="${specUrl}">Placement spec (JSON, millimetres)</a></li>
     </ul>
-    <p style="color:#666;font-size:12px">Print from the print-ready PNGs (true size, DPI set in the file) or the originals, not the proof. Stored under <code>customers/${escHtml(t.customer)}/</code>.</p>
+    <p style="color:#666;font-size:12px">Print from the print-ready PNGs (true size, DPI set in the file) or the originals, not the proof. Stored under <code>${escHtml(t.base)}/</code>.</p>
   </div>`;
 
-  await sendMail({ subject: `Studio job ${t.ref} — ${clean(spec.product_name, 60)} × ${spec.quantity} — ${clean(c.name, 60)}`, html,
+  await sendMail({ to: inboxOf(tenant), fromName: `${tenant.name} Studio`,
+    subject: `Studio job ${t.ref} — ${clean(spec.product_name, 60)} × ${spec.quantity} — ${clean(c.name, 60)}`, html,
     text: `Studio job ${t.ref}\n${clean(c.name)} ${clean(c.phone)}\nProof: ${proof?.url || "-"}\nSpec: ${specUrl}`,
     replyTo: c.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email) ? c.email : undefined });
 
@@ -164,7 +171,7 @@ export function customerId(c = {}) {
  * because this index couldn't be updated. */
 async function recordOrder(store, t, spec) {
   try {
-    const key = `customers/${t.customer}/customer.json`;
+    const key = `${t.base}/customer.json`;
     const r = await fetch(objectUrl(store, key, "GET", 60));
     const rec = r.ok ? await r.json() : { id: t.customer, orders: [] };
     const c = spec.customer || {};

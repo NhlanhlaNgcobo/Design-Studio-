@@ -208,13 +208,17 @@ export class Editor {
   }
 
   /* ───────────────────────────── input ───────────────────────────── */
-  hit(p) {
+  hit(p) { return this.hits(p)[0] ?? null; }
+
+  /** Every layer under the point, front-most first. */
+  hits(p) {
     const m = this.h.getModel();
+    const out = [];
     for (let i = m.layers.length - 1; i >= 0; i--) {
       const l = m.layers[i];
-      if (inPoly(p, layerCorners(l, m.assets))) return l;
+      if (inPoly(p, layerCorners(l, m.assets))) out.push(l);
     }
-    return null;
+    return out;
   }
 
   handleAt(p, l, m) {
@@ -250,9 +254,18 @@ export class Editor {
     } else if (handle === "scale") {
       this.mode = { kind: "scale", layer: sel, d0: Math.hypot(p.x - sel.x, p.y - sel.y), w0: sel.w, size0: sel.size };
     } else {
-      const hit = this.hit(p);
+      // Layers stacked under the pointer, front-most first. A click picks the
+      // front-most. To reach one underneath: click again without dragging
+      // (steps down — see up()), Alt+click, or pick it in the layer list. A
+      // layer reached that way is "pinned": it keeps priority under the
+      // pointer, so it can be dragged out from under the others.
+      const stack = this.hits(p);
+      let hit = sel && this.pinned === sel.id && stack.includes(sel) ? sel : stack[0] ?? null;
+      if (e.altKey && stack.length > 1) { hit = stack[(stack.indexOf(sel) + 1) % stack.length]; this.pinned = hit.id; }
+      else if (hit !== sel) this.pinned = null;
+      const again = !!hit && hit === sel && !e.altKey;
       this.h.onSelect(hit?.id ?? null);
-      if (hit) this.mode = { kind: "move", layer: hit, dx: p.x - hit.x, dy: p.y - hit.y };
+      if (hit) this.mode = { kind: "move", layer: hit, dx: p.x - hit.x, dy: p.y - hit.y, stack, again, x0: hit.x, y0: hit.y };
     }
     this.c.style.cursor = this.mode ? "grabbing" : "default";
     this.request();
@@ -310,6 +323,17 @@ export class Editor {
 
   up(e) {
     this.pointers.delete(e.pointerId);
+    const md = this.mode;
+    if (md?.kind === "move" && md.again && md.stack.length > 1 && md.layer.x === md.x0 && md.layer.y === md.y0) {
+      // A plain click on the selected layer: select the one beneath it.
+      const next = md.stack[(md.stack.indexOf(md.layer) + 1) % md.stack.length];
+      this.pinned = next === md.stack[0] ? null : next.id;
+      this.mode = null; this.guides = [];
+      this.h.onSelect(next.id);
+      this.request();
+      this.c.style.cursor = "default";
+      return;
+    }
     if (this.mode && this.pointers.size === 0) {
       this.mode = null; this.guides = [];
       this.h.onChange(true);

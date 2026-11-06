@@ -53,7 +53,9 @@ No framework and no runtime dependencies. Node 20+.
 node build/build.mjs                 # regenerate the HTML pages from build/content.mjs
 MOCK=1 node build/dev-server.mjs     # http://127.0.0.1:8125 — site + Studio + API,
                                      # with in-memory storage; emails go to build/.outbox/
-cd build && npm install && npm test  # API tests (SigV4 signer, tokens, file sniffing)
+cd build && npm install && npm test  # API tests (SigV4 signer, tokens, file sniffing, shops)
+node build/studio-test.mjs           # the Studio in a browser (needs the mock server running)
+node build/order-test.mjs            # an order end to end for every shop (mock server)
 ```
 
 A plain static server works for everything except `/api`:
@@ -189,6 +191,15 @@ bulk discounts, paper tiers, per m², fixed items, installed ranges, VAT — wit
 a live example quote. Saved with `STUDIO_ADMIN_PASSWORD` to the storage bucket;
 the Studio loads it on start. Customers see a price, never an "estimate".
 
+## White-label: one Studio, many shops — `site/studio/WHITE-LABEL.md`
+
+The Studio is a MiraiStack product that any print shop can use under its own
+brand. Everything that belongs to a shop — name, logo, colours, WhatsApp, email,
+town, product list, prices, admin password, order inbox, storage folder — comes
+from `site/studio/tenants/<id>.json`. Eminence is one shop (`eminence`, the
+default); `demo` (Northside Print Co.) shows a second. Pick a shop with
+`?tenant=<id>`, the embed's `tenant` option, or its own hostname.
+
 ## Display products: colours, settings and turning
 
 - **Gazebo** — true 3D: drag round it a full 360°, drag up to look down on the
@@ -204,6 +215,23 @@ the Studio loads it on start. Customers see a price, never an "estimate".
   written into the print-ready PNG.
 - **Mug** — drag to turn, now with zoom.
 
+## Background removal — free, on the customer's device
+
+Two buttons on any uploaded picture:
+
+- **Remove solid colour** — for logos and artwork on a white or coloured box.
+  Flood-fills from the edges, so white *inside* a logo stays; a strength slider
+  re-runs it from the original. Instant, no download.
+- **Remove with AI** — for photos and busy backgrounds. U²-Net (`u2netp`,
+  4.5 MB, Apache-2.0) run by onnxruntime-web (MIT) in the browser
+  (`site/studio/js/aibg.js`). Free: no API, no per-image cost, the photo is
+  never uploaded. About 15 MB downloads on first use; a few seconds per image.
+  Good on a product, person or pet; fine hair and glass come out soft, so the
+  proof notes the shop refines cut-outs from the original.
+
+Licences were checked for resale: BRIA RMBG (non-commercial) and img.ly's
+background-removal (AGPL) were ruled out.
+
 ## Orders: print files and customer folders
 
 Every order now carries a **print-ready PNG per printed side**
@@ -213,11 +241,11 @@ format, capped near 50 megapixels — with a transparent background and the DPI
 written into the file, so it opens at the right physical size. Names say what
 they are: `EP-261105-EAM-back-300x400mm-300dpi.png`.
 
-Storage is filed **by customer**, WhatsApp number + name:
+Storage is filed **by shop, then by customer** (WhatsApp number + name):
 
 ```
-customers/27825550101-sipho-dlamini/customer.json        ← who, and every order they've sent
-customers/27825550101-sipho-dlamini/EP-261105-EAM-<random>/
+tenants/eminence/customers/27825550101-sipho-dlamini/customer.json   ← who, and every order they've sent
+tenants/eminence/customers/27825550101-sipho-dlamini/EP-261105-EAM-<random>/
     print/      the print-ready PNGs
     artwork/    the customer's original uploads
     proof/      the proof sheet

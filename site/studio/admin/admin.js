@@ -6,6 +6,12 @@
  */
 import { DEFAULT_PRICES, setPrices, prices, quote, rand2 } from "../js/pricing.js";
 import { PRODUCTS, PROCESSES } from "../js/products.js";
+import { TENANT, applyTheme } from "../js/tenant.js";
+
+const API = `/api/pricing?tenant=${encodeURIComponent(TENANT.id)}`;
+applyTheme();
+document.title = `Studio prices — ${TENANT.name}`;
+document.querySelector("#shopName").textContent = TENANT.name;
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -121,7 +127,7 @@ function showSaved() {
 
 async function load() {
   try {
-    const r = await fetch("/api/pricing", { cache: "no-store" });
+    const r = await fetch(API, { cache: "no-store" });
     const d = r.ok ? await r.json() : {};
     if (d.prices) { setPrices(d.prices); P = structuredClone(prices()); updated = d.updated; }
   } catch { /* offline: starter prices */ }
@@ -133,10 +139,10 @@ $("#save").onclick = async () => {
   if (!pw) { status("err", "Type the admin password first."); $("#password").focus(); return; }
   const b = $("#save"); b.disabled = true; b.textContent = "Saving…";
   try {
-    const r = await fetch("/api/pricing", { method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${pw}` }, body: JSON.stringify({ prices: P }) });
+    const r = await fetch(API, { method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${pw}` }, body: JSON.stringify({ prices: P }) });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(d.error || `Could not save (${r.status}).`);
-    try { sessionStorage.setItem("eminence-admin", pw); } catch {}
+    try { sessionStorage.setItem(`studio-admin:${TENANT.id}`, pw); } catch {}
     updated = d.updated; isDirty = false; showSaved();
   } catch (e) { status("err", e.message); }
   finally { b.disabled = false; b.textContent = "Save prices"; }
@@ -146,7 +152,7 @@ $("#reset").onclick = () => {
   P = structuredClone(DEFAULT_PRICES); render(); example(); dirty(true);
 };
 addEventListener("beforeunload", (e) => { if (isDirty) e.preventDefault(); });
-try { $("#password").value = sessionStorage.getItem("eminence-admin") || ""; } catch {}
+try { $("#password").value = sessionStorage.getItem(`studio-admin:${TENANT.id}`) || ""; } catch {}
 
 setupExample();
 load();

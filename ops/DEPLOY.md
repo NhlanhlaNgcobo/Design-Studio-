@@ -75,6 +75,7 @@ match.
 | `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | from step 4 | Studio orders |
 | `JOB_SECRET` | 32+ random characters (`openssl rand -base64 32`) | signs upload sessions |
 | `STUDIO_ADMIN_PASSWORD` | a long passphrase, given only to the owner | saving prices at `/studio/admin/` (stored in the same bucket, `settings/pricing.json`) |
+| `STUDIO_ADMIN_PASSWORDS` | `{"northside":"…"}` | one admin password per white-label shop (JSON map) — see `site/studio/WHITE-LABEL.md` |
 
 **Nothing breaks if these are missing.** The endpoints return 503. The contact form
 then offers WhatsApp with the message already typed, and the Studio saves the proof

@@ -15,21 +15,18 @@
  * and spec and the chat says so — slower for Eminence, but nothing is lost.
  */
 
-export const WHATSAPP = "27789356433";
-export const EMAIL = "eminenceprinting@gmail.com";
+import { TENANT, shop, waLink } from "./tenant.js";
 
-export function whatsappUrl(text) {
-  return `https://wa.me/${WHATSAPP}?text=${encodeURIComponent(text)}`;
-}
+export function whatsappUrl(text) { return waLink(text); }
 
 export function orderMessage({ spec, quoteText, customer, proofUrl, attached }) {
   const lines = [
-    `Hi Eminence — I'd like to order from the Design Studio.`,
+    `Hi ${shop()} — I'd like to order from the ${TENANT.tagline}.`,
     ``,
     `Ref: ${spec.ref}`,
     `${spec.quantity} × ${spec.product_name}, ${spec.colour}, ${spec.process}`,
     spec.size_breakdown ? `Sizes: ${Object.entries(spec.size_breakdown).filter(([, n]) => +n > 0).map(([s, n]) => `${s}×${n}`).join(", ")}` : `Size: ${spec.size}`,
-    ...spec.surfaces.map((s) => `• ${s.label}: ${s.design_bounds_mm ? `${Math.round(s.design_bounds_mm.width)} × ${Math.round(s.design_bounds_mm.height)} mm` : "design"}`),
+    ...spec.surfaces.map((s) => `• ${s.label}: ${s.design_bounds_mm ? `${Math.round(s.design_bounds_mm.width)} × ${Math.round(s.design_bounds_mm.height)} mm` : "design"}${s.position_offset_mm ? ` (placed ${[s.position_offset_mm.down ? `${Math.abs(s.position_offset_mm.down)} mm ${s.position_offset_mm.down > 0 ? "lower" : "higher"}` : "", s.position_offset_mm.right ? `${Math.abs(s.position_offset_mm.right)} mm ${s.position_offset_mm.right > 0 ? "right" : "left"}` : ""].filter(Boolean).join(", ")} than standard)` : ""}`),
     quoteText ? `Studio price: ${quoteText}` : "",
     customer?.needBy ? `Needed by: ${customer.needBy}` : "",
     customer?.delivery ? `${customer.delivery}` : "",
@@ -56,7 +53,7 @@ export async function uploadJob({ spec, proof, specBlob, originals, prints = [],
     ];
     const start = await fetch("/api/job", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ step: "start", ref: spec.ref, spec, files: files.map(({ blob, ...f }) => f) }),
+      body: JSON.stringify({ step: "start", tenant: TENANT.id, ref: spec.ref, spec, files: files.map(({ blob, ...f }) => f) }),
     });
     if (!start.ok) return { ok: false, reason: start.status === 503 ? "not-configured" : `start-${start.status}` };
     const { uploads, token } = await start.json();
@@ -73,7 +70,7 @@ export async function uploadJob({ spec, proof, specBlob, originals, prints = [],
 
     const fin = await fetch("/api/job", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ step: "complete", ref: spec.ref, token, customer: spec.customer }),
+      body: JSON.stringify({ step: "complete", tenant: TENANT.id, ref: spec.ref, token, customer: spec.customer }),
     });
     if (!fin.ok) return { ok: false, reason: `complete-${fin.status}` };
     const j = await fin.json();

@@ -6,9 +6,11 @@
   "scripts": {
     "build": "node build.mjs",
     "assets": "node render-assets.mjs",
-    "test": "node --test ../site/api/_lib/s3.test.mjs ../site/api/_lib/pricing.test.mjs ../site/api/_lib/job.test.mjs",
+    "test": "node --test ../site/api/_lib/s3.test.mjs ../site/api/_lib/pricing.test.mjs ../site/api/_lib/job.test.mjs ../site/api/_lib/tenant.test.mjs",
     "dev": "node dev-server.mjs",
-    "dev:mock": "MOCK=1 node dev-server.mjs"
+    "dev:mock": "MOCK=1 node dev-server.mjs",
+    "test:studio": "node studio-test.mjs",
+    "test:orders": "node order-test.mjs"
   },
   "devDependencies": {
     "playwright-core": "1.64.1"

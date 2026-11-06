@@ -343,6 +343,23 @@ export const VALANCE_MM = 250;
  * The real print size of a surface for a chosen product size.
  * Returns { w, h } in mm, excluding bleed.
  */
+/* Moving a print area on the garment. The area keeps its size — so the DPI
+ * check, the A-size, the price and the print file are unchanged — only where
+ * it sits moves. Limits are what a printer can actually do on that garment,
+ * in mm from the standard position: [left, right] and [up, down]. */
+const MOVABLE = new Set(["garment", "cap", "tote"]);
+export function moveLimits(product, surf) {
+  if (!MOVABLE.has(product.render)) return null;
+  if (surf.move) return surf.move;
+  if (product.render === "cap") return { x: [-15, 15], y: [-10, 10] };
+  if (product.render === "tote") return { x: [-40, 40], y: [-40, 60] };
+  if (surf.id.startsWith("sleeve")) return { x: [-20, 20], y: [-20, 20] };
+  if (surf.id === "neck") return { x: [-30, 30], y: [-10, 40] };
+  if (surf.id.startsWith("chest")) return { x: [-40, 40], y: [-30, 60] };
+  if (product.fit === "hoodie" && surf.id === "front") return { x: [-40, 40], y: [-40, 30] };   // the pocket is below
+  return { x: [-60, 60], y: [-40, 160] };
+}
+
 export function surfaceSize(product, sizeOpt, surf) {
   if (surf.w && surf.h) return { w: surf.w, h: surf.h };
   if (product.render === "vehicle") {

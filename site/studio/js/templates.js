@@ -12,6 +12,8 @@
  * Positions are mm from the centre of the trim, as everywhere in the Studio.
  */
 
+import { TENANT } from "./tenant.js";
+
 export const FIELDS = {
   card: [
     ["name", "Name", "Thandi Mkhize"],
@@ -20,7 +22,7 @@ export const FIELDS = {
     ["phone", "Phone", "078 123 4567"],
     ["email", "Email", "thandi@mkhizeplumbing.co.za"],
     ["website", "Website", "www.mkhizeplumbing.co.za"],
-    ["address", "Address", "12 Main Road, Empangeni"],
+    ["address", "Address", `12 Main Road${TENANT.location ? ", " + TENANT.location : ""}`],
   ],
   welcome: [
     ["heading", "Heading", "Welcome"],
@@ -28,7 +30,7 @@ export const FIELDS = {
     ["host", "Your business", "Ngcobo Guesthouse"],
     ["wifi", "Wi-Fi network", "Ngcobo-Guest"],
     ["password", "Wi-Fi password", "welcome2026"],
-    ["phone", "Phone / WhatsApp", "078 935 6433"],
+    ["phone", "Phone / WhatsApp", "082 123 4567"],
     ["website", "Website or link", "www.ngcoboguesthouse.co.za"],
   ],
 };
@@ -209,5 +211,5 @@ export function anchor(l, measure) {
 export function qrData(d) {
   if (d.website?.trim()) return /^https?:\/\//i.test(d.website) ? d.website.trim() : `https://${d.website.trim()}`;
   const n = String(d.phone || "").replace(/\D/g, "").replace(/^0/, "27");
-  return n ? `https://wa.me/${n}` : "https://www.eminenceprinting.co.za";
+  return n ? `https://wa.me/${n}` : TENANT.home;
 }

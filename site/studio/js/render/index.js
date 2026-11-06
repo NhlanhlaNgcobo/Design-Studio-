@@ -41,7 +41,8 @@ function placements(ctx, view, outline) {
     .filter((s) => s.view === view)
     .map((s) => {
       const a = surfaceSize(product, size, s);
-      return { surfaceId: s.id, wMm: a.w, hMm: a.h, tex: ctx.tex[s.id], texCanvas: ctx.texCanvas[s.id], outline: outline && s.id === ctx.active };
+      const o = ctx.offsets?.[s.id] || {};
+      return { surfaceId: s.id, wMm: a.w, hMm: a.h, dx: o.dx || 0, dy: o.dy || 0, tex: ctx.tex[s.id], texCanvas: ctx.texCanvas[s.id], outline: outline && s.id === ctx.active };
     })
     .filter((p) => p.tex || p.outline);
 }
@@ -80,12 +81,20 @@ export async function renderMockup(stage, ctx) {
     if (!c) { stage.innerHTML = `<canvas class="mock" aria-label="Product preview"></canvas>`; c = stage.firstChild; lastSvgs.delete(stage); }
     if (product.render === "gazebo") drawGazebo(c, { ...ctx, frame: ctx.parts?.frame, editing: ctx.active, active: guides ? ctx.active : null });
     else if (product.render === "mug") drawMug(c, { ...ctx, inside: ctx.parts?.inside, handle: ctx.parts?.handle, active: guides ? ctx.active : null });
-    else await drawPhoto(c, blankFor(ctx.productId, view), { colour: ctx.colour, sizeChestMm: ctx.size.w, placements: placements(ctx, view, guides) });
+    else {
+      const entry = blankFor(ctx.productId, view);
+      await drawPhoto(c, entry, { colour: ctx.colour, sizeChestMm: ctx.size.w, placements: placements(ctx, view, guides) });
+      // Screen pixels per mm, for dragging the print area.
+      const k = entry.pxPerMm * ((entry.chestMm || ctx.size.w) / (ctx.size.w || entry.chestMm));
+      stage.pxPerMm = k * Math.min(c.clientWidth / c.width, c.clientHeight / c.height);
+    }
     return;
   }
   const raw = svgFor(ctx, view, guides);
   const svg = guides ? raw : stripUi(raw);
   if (svg !== lastSvgs.get(stage)) { stage.innerHTML = svg; lastSvgs.set(stage, svg); }
+  const box = stage.querySelector(`rect.ui-only[data-sf="${ctx.active}"]`);
+  stage.pxPerMm = box ? box.getBoundingClientRect().height / Number(box.dataset.hmm) : null;
 }
 
 /**

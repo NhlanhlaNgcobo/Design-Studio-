@@ -1,0 +1,18 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Studio on a shop's own website</title>
+<style>body{margin:0;font-family:system-ui,sans-serif;background:#fafaf7;color:#14161a}header{display:flex;justify-content:space-between;align-items:center;padding:16px 24px;background:#fff;border-bottom:1px solid #e3ded4}nav a{margin-left:18px;color:inherit;text-decoration:none}main{padding:24px 0 0}h1{margin:0 24px 16px}#designer{border-top:1px solid #e3ded4;background:#fff}#status{margin:12px 24px}#status{margin-top:12px}</style>
+<!-- Stands in for a shop's existing website (Eminence's, say) with the Studio
+     on one of its pages. Order mode: the Studio sends the order itself. -->
+<header><b>Your shop's website</b><nav><a href="#">Home</a><a href="#">Services</a><a href="#" aria-current="page">Design online</a><a href="#">Contact</a></nav></header>
+<main>
+  <h1>Design your order online</h1>
+  <div id="designer"></div>
+  <p id="status" role="status"></p>
+</main>
+<script type="module">
+  import { mountStudio } from './embed.js';
+  mountStudio('#designer', {
+    tenant: new URLSearchParams(location.search).get('tenant') || 'eminence',
+    product: 'tee',
+    onSent(ref) { document.querySelector('#status').textContent = `Order ${ref} sent.`; },
+  });
+</script></html>

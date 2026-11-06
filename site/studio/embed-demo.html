@@ -3,5 +3,5 @@
 <h1>Customize your product</h1><div id="customizer"></div><p id="result" role="status">Choose your artwork, then select “Use this design”.</p>
 <script type="module">
 import {mountStudio} from './embed.js';
-mountStudio('#customizer',{product:'tee',onComplete(design){window.receivedDesign=design;document.querySelector('#result').textContent=`Design ${design.spec.ref} received. The store can now attach it to a cart item.`;}});
+mountStudio('#customizer',{product:'tee',handoff:'host',onComplete(design){window.receivedDesign=design;document.querySelector('#result').textContent=`Design ${design.spec.ref} received. The store can now attach it to a cart item.`;}});
 </script></html>

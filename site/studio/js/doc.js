@@ -118,9 +118,12 @@ export function carryOver(designs, fromProduct, toProduct, sizeOf) {
  * those can be tens of megabytes. localStorage would refuse them. Everything
  * is wrapped: a private window or blocked storage simply means no draft. */
 
-let DB = "eminence-studio";
+import { TENANT } from "./tenant.js";
+// Drafts are kept per shop, so two shops' Studios on one browser never mix.
+const ROOT = TENANT.id === "eminence" ? "eminence-studio" : `studio-${TENANT.id}`;
+let DB = ROOT;
 const STORE = "draft";
-export function setDraftScope(scope) { DB = scope ? `eminence-studio:${scope}` : 'eminence-studio'; }
+export function setDraftScope(scope) { DB = scope ? `${ROOT}:${scope}` : ROOT; }
 function open() {
   return new Promise((res, rej) => {
     const r = indexedDB.open(DB, 1);

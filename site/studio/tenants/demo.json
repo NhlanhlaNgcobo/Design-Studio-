@@ -1,0 +1,17 @@
+{
+  "id": "demo",
+  "name": "Northside Print Co.",
+  "shortName": "Northside",
+  "tagline": "Online designer",
+  "logo": "/studio/tenants/demo/logo.svg",
+  "home": "https://example.com/",
+  "studioUrl": "example.com/designer",
+  "whatsapp": "27820000000",
+  "phoneDisplay": "082 000 0000",
+  "email": "orders@example.com",
+  "location": "Durban",
+  "collectLabel": "Collect in Durban",
+  "theme": { "primary": "#0F766E", "accent": "#F59E0B", "ink": "#10201E" },
+  "products": null,
+  "poweredBy": { "name": "MiraiStack", "url": "" }
+}

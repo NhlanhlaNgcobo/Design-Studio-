@@ -123,7 +123,7 @@ export async function drawPhoto(canvas, entry, o, opts = {}) {
     const a = entry.areas[p.surfaceId];
     if (!a || !p.texCanvas) continue;
     ag.save();
-    ag.translate(a.cx, a.cy); ag.rotate(((a.rot || 0) * Math.PI) / 180);
+    ag.translate(a.cx + (p.dx || 0) * k, a.cy + (p.dy || 0) * k); ag.rotate(((a.rot || 0) * Math.PI) / 180);
     ag.drawImage(p.texCanvas, (-p.wMm * k) / 2, (-p.hMm * k) / 2, p.wMm * k, p.hMm * k);
     ag.restore();
   }
@@ -159,7 +159,7 @@ export async function drawPhoto(canvas, entry, o, opts = {}) {
   if (!opts.w) for (const p of o.placements) {
     const a = entry.areas[p.surfaceId];
     if (!a || !p.outline) continue;
-    g.save(); g.translate(a.cx, a.cy); g.rotate(((a.rot || 0) * Math.PI) / 180);
+    g.save(); g.translate(a.cx + (p.dx || 0) * k, a.cy + (p.dy || 0) * k); g.rotate(((a.rot || 0) * Math.PI) / 180);
     g.setLineDash([12, 9]); g.strokeStyle = "rgba(229,0,126,.85)"; g.lineWidth = Math.max(2, w / 400);
     g.strokeRect((-p.wMm * k) / 2, (-p.hMm * k) / 2, p.wMm * k, p.hMm * k);
     g.restore();

@@ -9,9 +9,11 @@
  * history, the draft save and the quote catch up.
  */
 
+import { TENANT, shop, applyTheme, waLink } from "./tenant.js";
+import { moveLimits } from "./products.js";
 import { PRODUCTS, GROUPS, PROCESSES, PAPER, surfaceSize, effectiveDpi, dpiVerdict, isDark, contrastRatio, luminance, paperFor, largestPaperIn, scaleToPaper } from "./products.js";
 import { quote as priceQuote, rand, rand2, prices, loadPrices } from "./pricing.js";
-import { loadAsset, applyBackgroundRemoval, restoreBackground } from "./artwork.js";
+import { loadAsset, applyBackgroundRemoval, aiBackgroundRemoval, restoreBackground } from "./artwork.js";
 import { History, uid, FONTS, newTextLayer, carryOver, saveDraft, loadDraft, clearDraft, setDraftScope } from "./doc.js";
 import { layerSize, layerCorners, designBounds, composeSurface, ensureFonts, qrModules } from "./compose.js";
 import { Editor } from "./editor.js";
@@ -27,15 +29,25 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const mm = (n) => `${Math.round(n)} mm`;
+/* Embedded on another website (embed.js), two ways:
+ *   order mode (default) — the Studio takes the order itself, WhatsApp + email,
+ *                          exactly as standalone; only the shop's header is hidden
+ *                          because the host page already has it.
+ *   cart mode (handoff=host) — "Use this design" hands the design to the host
+ *                          page, for shops with their own online cart.
+ * hostOrigin is set only in cart mode; parentOrigin is where status messages go. */
 const embedParams = new URLSearchParams(location.search);
-let hostOrigin = null;
+const embedded = embedParams.get('embed') === '1' && parent !== window;
+let parentOrigin = null, hostOrigin = null;
 try {
   const origin = new URL(embedParams.get('parentOrigin'));
-  if (embedParams.get('embed') === '1' && parent !== window && ['https:', 'http:'].includes(origin.protocol)) hostOrigin = origin.origin;
+  if (embedded && ['https:', 'http:'].includes(origin.protocol)) parentOrigin = origin.origin;
 } catch { /* Standalone studio. */ }
+if (embedded) document.body.classList.add('is-embedded');
+if (parentOrigin && embedParams.get('handoff') === 'host') hostOrigin = parentOrigin;
 if (hostOrigin) {
+  document.body.classList.add('is-cart');
   setDraftScope(`${hostOrigin}:${embedParams.get('product') || 'tee'}`);
-  document.body.classList.add('is-embedded');
   const accent = embedParams.get('accent');
   if (/^#[\da-f]{6}$/i.test(accent || '')) document.body.style.setProperty('--magenta-ink', accent);
   $('#sendTop .long').textContent = 'Use this design';
@@ -67,7 +79,7 @@ function filterProducts() {
 const state = {
   productId: "tee", sizeId: null, colour: null, process: null, stock: null, options: {},
   qty: 1, breakdown: {}, surfaceId: null, selected: null, designs: {},
-  yaw: null, pitch: 18, zoom: 1, parts: {}, scene: "grass", details: {}, brand: null,
+  yaw: null, pitch: 18, zoom: 1, parts: {}, scene: "grass", details: {}, brand: null, offsets: {},
 };
 /* Products you can turn by dragging: true 3D (gazebo, mug), or turned like a
  * card on its stand (flag, banners, boards). */
@@ -117,7 +129,7 @@ function selectProduct(id, { keepDesign = true } = {}) {
   state.selected = null;
   // Mug: turned so the handle shows on the right and most of the print faces you.
   state.yaw = to.render === "gazebo" ? -32 : to.render === "mug" ? 52 : 0;
-  state.pitch = 18; state.zoom = 1;
+  state.pitch = 18; state.zoom = 1; state.offsets = {};
   state.parts = Object.fromEntries((to.parts || []).map((pt) => [pt.id, pt.colours[0].hex]));
   if (to.sizeBreakdown) { if (!Object.keys(state.breakdown).length) state.breakdown = { M: 1 }; }
   else state.qty = to.defaultQty ?? (to.qtyTiers?.[to.group === "Print" ? 1 : 0] ?? 1);
@@ -147,6 +159,7 @@ function renderProductPanel() {
   // The same colours on the editing canvas, so a design for a black shirt is
   // made on black — no switching to the preview to find out.
   $("#editColours").innerHTML = $("#colours").innerHTML;
+  $("#editColoursWrap > span").textContent = { mug: "Outside", gazebo: "Canopy" }[p.render] ?? (p.printedBase ? "Background" : "Garment");
   renderDetails();
   // Parts with their own colour: a gazebo's frame, a mug's inside and handle.
   $("#partFields").innerHTML = (p.parts || []).map((pt) => `
@@ -303,6 +316,7 @@ function renderSurfaces() {
   $("#scenes").hidden = p.render !== "gazebo";
   $("#scenes").innerHTML = SCENES.map((s) => `<button role="radio" data-scene="${s.id}" aria-checked="${s.id === state.scene}">${s.label}</button>`).join("");
   $("#turnTools").hidden = !TURN[p.render];
+  renderPlaceTools();
   $("#zoomIn").hidden = $("#zoomOut").hidden = TURN[p.render] === "card";
   $("#stageHint").textContent = hint ?? (p.quoteOnly ? "Visual brief — we measure and confirm on site." : "");
   $("#stage").classList.toggle("grab", !!hint);
@@ -315,6 +329,54 @@ $("#views").addEventListener("click", (e) => {
   const on = P().surfaces.filter((s) => s.view === b.dataset.v);
   setSurface((on.find((s) => state.designs[s.id]?.length) ?? on[0]).id);
 });
+/* ─────────── moving the print area on the garment ───────────
+ * Only where it sits changes; its size — and so the DPI, the A-size, the price
+ * and the print file — does not. */
+const offsetOf = (id = state.surfaceId) => state.offsets?.[id] || { dx: 0, dy: 0 };   // older drafts have no offsets
+function setOffset(dx, dy, id = state.surfaceId) {
+  const lim = moveLimits(P(), surf(id)); if (!lim) return;
+  const c = (v, [lo, hi]) => Math.round(Math.max(lo, Math.min(hi, v)));
+  const o = { dx: c(dx, lim.x), dy: c(dy, lim.y) };
+  state.offsets = { ...state.offsets, [id]: o };
+  if (!o.dx && !o.dy) delete state.offsets[id];
+  renderPlaceTools(); updateMockup();
+}
+function describeOffset({ dx, dy }) {
+  const v = dy ? `${Math.abs(dy)} mm ${dy > 0 ? "lower" : "higher"}` : "", h = dx ? `${Math.abs(dx)} mm ${dx > 0 ? "right" : "left"}` : "";
+  return [v, h].filter(Boolean).join(", ") || "standard position";
+}
+function renderPlaceTools() {
+  const lim = moveLimits(P(), surf());
+  $("#placeTools").hidden = !lim;
+  if (!lim) return;
+  const o = offsetOf();
+  $("#placeInfo").textContent = `${surf().label}: ${describeOffset(o)}`;
+  $("#placeReset").hidden = !o.dx && !o.dy;
+  $("#placeTip").textContent = $("#showGuides").checked ? "Drag the dashed box to move it." : "Tick “Show print area” to drag it.";
+}
+$("#placeTools").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-nudge]");
+  if (b) { const [x, y] = b.dataset.nudge.split(",").map(Number), o = offsetOf(); setOffset(o.dx + x, o.dy + y); commit(); }
+  if (e.target.closest("#placeReset")) { setOffset(0, 0); commit(); }
+});
+$("#showGuides").addEventListener("change", renderPlaceTools);
+{
+  const st = $("#stage");
+  let drag = null;
+  st.addEventListener("pointerdown", (e) => {
+    if (!moveLimits(P(), surf()) || !$("#showGuides").checked || !st.pxPerMm) return;
+    drag = { x: e.clientX, y: e.clientY, o: offsetOf(), k: st.pxPerMm, t: 0 };
+    st.setPointerCapture(e.pointerId); st.classList.add("moving");
+  });
+  st.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    const now = performance.now(); if (now - drag.t < 40) return; drag.t = now;
+    setOffset(drag.o.dx + (e.clientX - drag.x) / drag.k, drag.o.dy + (e.clientY - drag.y) / drag.k);
+  });
+  const end = () => { if (drag) { drag = null; st.classList.remove("moving"); commit(); } };
+  st.addEventListener("pointerup", end); st.addEventListener("pointercancel", end);
+}
+
 /* The gazebo turns to face the part you pick, so the back wall is seen from behind. */
 const GAZEBO_VIEW = { front: -32, side: -58, back: 148, left: 58, right: -58 };
 function turnTo(target) {
@@ -375,7 +437,7 @@ async function updateTextures(ids = P().surfaces.map((s) => s.id)) {
 
 function renderCtx(extra = {}) {
   return { productId: state.productId, product: P(), size: S(), colour: state.colour, tex, texCanvas,
-    active: state.surfaceId, yaw: state.yaw, pitch: state.pitch, zoom: state.zoom, parts: state.parts, scene: state.scene, options: state.options, stock: state.stock, ...extra };
+    active: state.surfaceId, yaw: state.yaw, pitch: state.pitch, zoom: state.zoom, parts: state.parts, scene: state.scene, offsets: state.offsets, options: state.options, stock: state.stock, ...extra };
 }
 function updateMockup() { if (state.colour) return renderMockup($("#stage"), renderCtx({ showGuides: $('#showGuides').checked })); }
 new ResizeObserver(() => updateMockup()).observe($('#stage'));
@@ -501,7 +563,8 @@ $("#addBackground").onclick = () => {
   const a = areaOf(), W = a.w + a.bleed * 2, H = a.h + a.bleed * 2;
   addLayer({ kind: "shape", shape: "rect", radius: 0, fill: brandColour(), w: W, ar: H / W, background: true }, 0);
 };
-$("#addQr").onclick = () => addLayer({ kind: "qr", data: "https://www.eminenceprinting.co.za", colour: isDark(material()) ? "#FFFFFF" : "#14161A", bg: null, w: Math.max(18, Math.min(30, areaOf().h * 0.5)) });
+// A new QR code starts on the shop's own website; the customer types their link over it.
+$("#addQr").onclick = () => addLayer({ kind: "qr", data: TENANT.home, colour: isDark(material()) ? "#FFFFFF" : "#14161A", bg: null, w: Math.max(18, Math.min(30, areaOf().h * 0.5)) });
 /** The colour a new shape starts in: the design's own first ink, else Eminence magenta. */
 function brandColour() {
   for (const l of layers()) if (l.kind === "text" && !/^#(fff|ffffff|14161a)$/i.test(l.colour)) return l.colour;
@@ -554,21 +617,38 @@ function act(kind) {
     case "dup": { const c = { ...l, id: uid(), x: l.x + 6, y: l.y + 6 }; L.splice(i + 1, 0, c); state.selected = c.id; break; }
     case "fwd": if (i < L.length - 1) [L[i], L[i + 1]] = [L[i + 1], L[i]]; break;
     case "back": if (i > 0) [L[i], L[i - 1]] = [L[i - 1], L[i]]; break;
+    case "toFront": L.push(...L.splice(i, 1)); break;
+    case "toBack": L.unshift(...L.splice(i, 1)); break;
     case "del": L.splice(i, 1); state.selected = null; break;
   }
   afterStructuralChange();
 }
-for (const id of ["centre", "fit", "fill", "dup", "fwd", "back", "del"]) $("#" + id).onclick = () => act(id);
+for (const id of ["centre", "fit", "fill", "dup", "toFront", "fwd", "back", "toBack", "del"]) $("#" + id).onclick = () => act(id);
+// Ctrl/⌘ + ] forward, [ backward; with Shift, all the way.
+addEventListener("keydown", (e) => {
+  if (!(e.ctrlKey || e.metaKey) || !selLayer() || /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName)) return;
+  if (e.code === "BracketRight") { e.preventDefault(); act(e.shiftKey ? "toFront" : "fwd"); }
+  if (e.code === "BracketLeft") { e.preventDefault(); act(e.shiftKey ? "toBack" : "back"); }
+});
 
 function renderToolbar() {
   $("#selTools").hidden = !selLayer();
   $("#emptyCta").hidden = layers().length > 0;
   $('#layerCount').textContent = layers().length;
-  $('#layerList').innerHTML = layers().length ? [...layers()].reverse().map(l => `<button class="layer-item" data-layer="${l.id}" aria-pressed="${l.id === state.selected}"><span>${{ text: 'T', shape: l.background ? '◼' : '▭', qr: '▦' }[l.kind] ?? '▧'}</span><b>${esc(layerName(l))}</b></button>`).join('') : '<p class="fine">Upload artwork or add text to get started. Each print position has its own layers.</p>';
+  // Front-most first, like any design tool. Drag a row, or use its arrows, to restack.
+  const L = layers(), n = L.length;
+  $('#layerList').innerHTML = n ? `${n > 1 ? '<p class="layer-ends">Front</p>' : ''}` + [...L].reverse().map((l, k) => `<div class="layer-row" draggable="true" data-row="${l.id}">
+      <button class="layer-item" data-layer="${l.id}" aria-pressed="${l.id === state.selected}"><span>${{ text: 'T', shape: l.background ? '◼' : '▭', qr: '▦' }[l.kind] ?? '▧'}</span><b>${esc(layerName(l))}</b></button>
+      ${n > 1 ? `<span class="layer-move"><button data-up="${l.id}" aria-label="Move ${esc(layerName(l))} forward" title="Forward"${k === 0 ? " disabled" : ""}>▲</button><button data-down="${l.id}" aria-label="Move ${esc(layerName(l))} back" title="Back"${k === n - 1 ? " disabled" : ""}>▼</button></span>` : ''}
+    </div>`).join('') + `${n > 1 ? '<p class="layer-ends">Back</p>' : ''}` : '<p class="fine">Upload artwork or add text to get started. Each print position has its own layers.</p>';
 }
 $('#layerList').onclick = e => {
+  const mv = e.target.closest('[data-up],[data-down]');
+  if (mv) { state.selected = mv.dataset.up || mv.dataset.down; act(mv.dataset.up ? "fwd" : "back"); return; }
   const button = e.target.closest('[data-layer]'); if (!button) return;
-  state.selected = button.dataset.layer; renderInspector(); renderToolbar(); editor.request(); setMode('edit'); goTab('design');
+  state.selected = button.dataset.layer;
+  editor.pinned = state.selected;                  // reachable on the canvas even when it's underneath
+  renderInspector(); renderToolbar(); editor.request(); setMode('edit'); goTab('design');
 };
 
 /** Colours already used in this design, so new parts match the brand. */
@@ -580,6 +660,48 @@ function brandInks() {
     if (l.kind === "image") for (const c of assets.get(l.assetId)?.colours || []) out.push(c.hex);
   }
   return [...new Set(out.map((c) => c.toUpperCase()))].slice(0, 6);
+}
+
+/* Background tools for a picture: solid colour (logos, flat artwork — instant,
+ * keeps white inside the logo) or AI (photos — in the browser, free). */
+function bgToolsHtml(a) {
+  const on = a.bgRemoved ? a.bgMethod : null;
+  return `<div class="bg-tools">
+    <div class="bg-head"><b>Background</b>${on ? `<span>${on === "ai" ? "removed with AI" : "solid colour removed"}</span><button class="link-btn" data-act="rsbg">Undo</button>` : ""}</div>
+    <div class="bg-btns">
+      <button class="btn btn-sm ${on === "solid" ? "btn-ink" : "btn-ghost"}" data-act="rmbg" title="For logos and artwork on a plain background">Remove solid colour</button>
+      <button class="btn btn-sm ${on === "ai" ? "btn-ink" : "btn-ghost"}" data-act="aibg" title="For photos and busy backgrounds — runs on this device, free">Remove with AI</button>
+    </div>
+    ${on === "solid" ? `<label class="bg-strength">Strength<span class="rng"><input type="range" min="8" max="90" step="2" data-f="bgtol" value="${a.bgTolerance ?? 34}"><output>${a.bgTolerance ?? 34}</output></span></label>` : ""}
+    <p class="bg-note">${on ? "We'll refine the cut-out from your original file before printing." : "Logo on a white or coloured box? Use solid colour. A photo? Use AI — it runs on your device and the image isn't uploaded."}</p>
+  </div>`;
+}
+
+/* Drag a row in the layer list to restack it. The list shows front-most first,
+ * so a row's position k is layer index n-1-k. */
+{
+  let dragId = null;
+  const list = $('#layerList');
+  list.addEventListener('dragstart', (e) => { const r = e.target.closest('[data-row]'); if (!r) return; dragId = r.dataset.row; r.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', dragId); });
+  list.addEventListener('dragend', (e) => { e.target.closest('[data-row]')?.classList.remove('dragging'); $$('.layer-row.drop-before,.layer-row.drop-after', list).forEach((r) => r.classList.remove('drop-before', 'drop-after')); dragId = null; });
+  list.addEventListener('dragover', (e) => {
+    const r = e.target.closest('[data-row]'); if (!r || !dragId) return;
+    e.preventDefault();
+    const after = e.clientY > r.getBoundingClientRect().top + r.offsetHeight / 2;
+    $$('.layer-row', list).forEach((x) => x.classList.remove('drop-before', 'drop-after'));
+    r.classList.add(after ? 'drop-after' : 'drop-before');
+  });
+  list.addEventListener('drop', (e) => {
+    const r = e.target.closest('[data-row]'); if (!r || !dragId || r.dataset.row === dragId) return;
+    e.preventDefault();
+    const L = layers(), from = L.findIndex((l) => l.id === dragId);
+    const [moved] = L.splice(from, 1);
+    const target = L.findIndex((l) => l.id === r.dataset.row);
+    const after = r.classList.contains('drop-after');      // "after" in the list = further back
+    L.splice(after ? target : target + 1, 0, moved);
+    state.selected = moved.id;
+    afterStructuralChange();
+  });
 }
 
 function layerName(l) {
@@ -609,7 +731,7 @@ function renderInspector() {
       <div class="insp-head"><h3>${esc(a?.name ?? "Artwork")}</h3><span class="mono" style="font-size:.74rem;color:var(--muted)">${a?.vector ? "vector" : `${a?.natW} × ${a?.natH} px`}</span></div>
       <div class="verdict ${v.level}"><div><b>${v.label}</b>${v.note}</div>${v.fix ? `<button class="btn btn-sm btn-ink" data-act="sharp">${v.fix}</button>` : ""}</div>
       ${a?.whiteBox && !a.bgRemoved ? `<div class="verdict warn"><div><b>White background</b>${isLight(material()) ? "Invisible on this colour, but it will print as a box on anything darker." : "This will print as a white box on a coloured product."}</div><button class="btn btn-sm btn-ink" data-act="rmbg">Remove it</button></div>` : ""}
-      ${a?.bgRemoved ? `<div class="verdict ok"><div><b>Background removed</b>We'll do this properly from your original file.</div><button class="btn btn-sm btn-ghost" data-act="rsbg">Undo</button></div>` : ""}
+      ${a && !a.vector && a.preview ? bgToolsHtml(a) : ""}
       <div class="print-size" id="printSize">${printSizeHtml(l)}</div>
       <div class="insp-grid">
         <label>Width (mm)<input type="number" min="3" step="1" data-f="w" value="${Math.round(sz.w)}"></label>
@@ -702,6 +824,13 @@ async function sizeToPaper(l, name) {
 
 $("#inspector").addEventListener("input", (e) => {
   const l = selLayer(); const f = e.target.dataset.f; if (!l || !f) return;
+  if (f === "bgtol") {                                   // re-run the solid-colour removal from the original
+    const a = assets.get(l.assetId), v = +e.target.value;
+    const out = e.target.parentElement.querySelector("output"); if (out) out.textContent = v;
+    clearTimeout(inspT);
+    inspT = setTimeout(() => { applyBackgroundRemoval(a, v); editor.request(); liveUpdate(); renderChecks(); commit(true); }, 120);
+    return;
+  }
   let v = e.target.type === "checkbox" ? e.target.checked : e.target.value;
   if (["rot", "size", "spacing", "arc", "outline", "weight", "radius"].includes(f)) v = +v;
   if (f === "qrbg") { l.bg = v ? "#FFFFFF" : null; editor.request(); liveUpdate(); clearTimeout(inspT); inspT = setTimeout(commit, 400); return; }
@@ -731,6 +860,18 @@ $("#inspector").addEventListener("click", (e) => {
     l.shape = b.dataset.shape === "ellipse" ? "ellipse" : "rect";
     l.radius = b.dataset.shape === "round" ? Math.max(1, Math.round(Math.min(l.w, l.w * l.ar) * 0.15)) : 0;
     renderInspector(); renderToolbar(); editor.request(); liveUpdate(); commit();
+  }
+  if (b.dataset.act === "aibg") {
+    const a = assets.get(l.assetId);
+    const all = $$('#inspector [data-act="aibg"], #inspector [data-act="rmbg"]');
+    all.forEach((x) => (x.disabled = true));
+    b.textContent = "Loading the AI (first time ~15 MB)…";
+    const tick = setTimeout(() => { b.textContent = "Removing the background…"; }, 2500);
+    aiBackgroundRemoval(a)
+      .then(() => { renderInspector(); renderChecks(); editor.request(); liveUpdate(); commit(true); toast("Background removed. Check the edges — use Undo to put it back."); })
+      .catch((e) => { console.error(e); toast("Couldn't run the AI remover here (it needs an internet connection the first time). Try “Remove solid colour”, or send the file as it is.", 6000); renderInspector(); })
+      .finally(() => clearTimeout(tick));
+    return;
   }
   if (b.dataset.act === "rmbg" || b.dataset.act === "rsbg") {
     const a = assets.get(l.assetId);
@@ -914,13 +1055,13 @@ function refreshQuote() {
   html += q.notes.map((n) => `<p class="q-note">${esc(n)}</p>`).join("");
   html += q.blockers.map((b) => `<div class="q-block">${esc(b)}</div>`).join("");
   $("#quote").innerHTML = html;
-  $("#send").textContent = P().quoteOnly ? "Request a site quote" : "Send to Eminence";
+  $("#send").textContent = P().quoteOnly ? "Request a site quote" : `Send to ${shop()}`;
   if (hostOrigin) $('#send').textContent = 'Use this design';
   return q;
 }
 
 /* ─────────────────────────── commit / history / draft ─────────────────────────── */
-function snapshot() { return { productId: state.productId, sizeId: state.sizeId, colour: state.colour, process: state.process, stock: state.stock, options: state.options, designs: state.designs, details: state.details, brand: state.brand, parts: state.parts, scene: state.scene }; }
+function snapshot() { return { productId: state.productId, sizeId: state.sizeId, colour: state.colour, process: state.process, stock: state.stock, options: state.options, designs: state.designs, details: state.details, brand: state.brand, parts: state.parts, scene: state.scene, offsets: state.offsets }; }
 
 let draftT, lastHist = "";
 async function commit(force = false, rememberArtwork = true) {
@@ -1011,7 +1152,7 @@ async function openSend() {
       const {spec, proof, quote} = await makeProof();
       const used = new Set(designedIds().flatMap(id => state.designs[id].filter(l => l.kind === 'image').map(l => l.assetId)));
       const files = [...assets.values()].filter(a => used.has(a.id)).map(a => ({ id:a.id, name:a.name, file:a.file }));
-      parent.postMessage({type:'eminence:complete', design:{spec, proof, quote, files, document:JSON.parse(JSON.stringify(state))}}, hostOrigin);
+      parent.postMessage({type:'studio:complete', design:{spec, proof, quote, files, document:JSON.parse(JSON.stringify(state))}}, hostOrigin);
       toast('Design ready. Continue in your store.');
     } catch (error) { console.error(error); toast('Could not prepare the design. Please try again.'); }
     finally { $('#send').disabled = $('#sendTop').disabled = false; }
@@ -1027,7 +1168,7 @@ async function openSend() {
 }
 $("#send").onclick = $("#sendTop").onclick = openSend;
 $("#sendForm").addEventListener("change", (e) => {
-  if (e.target.name === "delivery") $("#addrField").hidden = e.target.value === "Collect in Empangeni";
+  if (e.target.name === "delivery") $("#addrField").hidden = e.target.value === "collect";
 });
 
 let lastSent = null;
@@ -1045,7 +1186,7 @@ $("#sendForm").addEventListener("submit", async (e) => {
   const win = window.open("", "_blank");
   const go = $("#sendGo"); go.disabled = true; go.textContent = "Preparing your proof…";
   const customer = { name: data.name.trim(), phone: data.phone.trim(), email: data.email?.trim() || null, company: data.company?.trim() || null,
-    delivery: data.delivery === "Collect in Empangeni" ? data.delivery : `${data.delivery}: ${data.address || "address to follow"}`,
+    delivery: data.delivery === "collect" ? TENANT.collectLabel : `${data.delivery}: ${data.address || "address to follow"}`,
     needBy: data.needBy || null, notes: data.notes?.trim() || null };
   try {
     const { spec, quote: q, proof } = await makeProof(customer);
@@ -1065,17 +1206,18 @@ $("#sendForm").addEventListener("submit", async (e) => {
     const url = whatsappUrl(msg);
     if (win) win.location.href = url;
     lastSent = { spec, proof, url };
+    if (parentOrigin) parent.postMessage({ type: "studio:sent", ref: spec.ref }, parentOrigin);
     $("#sentRef").textContent = spec.ref;
     $("#sentText").textContent = up.ok
-      ? "Your files and proof are with Eminence. Finish sending the WhatsApp message and they'll reply with payment details and a production proof."
-      : "We've saved your proof to your downloads. Send the WhatsApp message, then attach the proof image to it — Eminence replies with payment details and a production proof.";
+      ? `Your files and proof are with ${shop()}. Finish sending the WhatsApp message and they'll reply with payment details and a production proof.`
+      : `We've saved your proof to your downloads. Send the WhatsApp message, then attach the proof image to it — ${shop()} replies with payment details and a production proof.`;
     $("#sentWa").href = url;
     $("#sendForm").hidden = true; $("#sent").hidden = false;
     clearDraft();
   } catch (ex) {
     console.error(ex);
     win?.close();
-    err("Something went wrong preparing your proof. You can still WhatsApp us on 078 935 6433.");
+    err(`Something went wrong preparing your proof. You can still WhatsApp us${TENANT.phoneDisplay ? ` on ${TENANT.phoneDisplay}` : ""}.`);
   } finally { go.disabled = false; go.textContent = "Send on WhatsApp"; }
 });
 $("#sentProof").onclick = () => lastSent && download(lastSent.proof, `${lastSent.spec.ref}-proof.png`);
@@ -1096,14 +1238,36 @@ let toastT;
 function toast(text, ms = 3200) { const t = $("#toast"); t.textContent = text; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(hideToast, ms); }
 function hideToast() { $("#toast").hidden = true; }
 
+/* ─────────────────────────── white-label branding ─────────────────────────── */
+function brandPage() {
+  applyTheme();
+  document.title = `${TENANT.tagline} — ${TENANT.name}`;
+  $("#brand").href = TENANT.home; $("#brand").setAttribute("aria-label", `${TENANT.name} — home`);
+  $("#brandName").textContent = TENANT.shortName; $("#brandTag").textContent = TENANT.tagline;
+  if (TENANT.logo) {
+    const img = new Image(); img.src = TENANT.logo; img.alt = ""; img.className = "brand-logo";
+    $("#brandMark").replaceWith(img);
+  }
+  const wa = $("#barWa");
+  wa.hidden = !TENANT.whatsapp;
+  wa.href = waLink(); wa.textContent = `Questions? WhatsApp ${TENANT.phoneDisplay || "us"}`;
+  for (const el of $$("[data-shop]")) el.textContent = shop();
+  const by = TENANT.poweredBy;
+  if (by?.name) {
+    $("#poweredBy").hidden = false;
+    $("#poweredBy").innerHTML = by.url ? `Studio by <a href="${esc(by.url)}" target="_blank" rel="noopener">${esc(by.name)}</a>` : `Studio by ${esc(by.name)}`;
+  }
+}
+
 /* ─────────────────────────── boot ─────────────────────────── */
 (async function boot() {
-  await Promise.all([loadManifest(), loadPrices()]);
+  brandPage();
+  await Promise.all([loadManifest(TENANT.blanks || undefined), loadPrices(`/api/pricing?tenant=${TENANT.id}`)]);
   const params = new URLSearchParams(location.search);
   const start = PRODUCTS[params.get("product")] ? params.get("product") : "tee";
   state.productId = start;
   selectProduct(start, { keepDesign: false });
-  if (hostOrigin) parent.postMessage({type:'eminence:ready'}, hostOrigin);
+  if (parentOrigin) parent.postMessage({type:'studio:ready'}, parentOrigin);
   if (params.get("process") && P().processes.includes(params.get("process"))) { state.process = params.get("process"); renderProcesses(); refreshAll(); }
 
   const draft = await loadDraft();
