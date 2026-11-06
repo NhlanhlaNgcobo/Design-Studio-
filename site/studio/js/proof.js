@@ -163,7 +163,11 @@ export async function renderProof(m, dataTex) {
       const vectorLike = l.kind !== "image";
       g.font = "600 18px Archivo, sans-serif"; g.fillStyle = INK; g.fillText(`${s.label}`, sx, y);
       g.font = "500 16px 'JetBrains Mono', monospace"; g.fillStyle = MUTED;
-      g.fillText(`${what}`, sx + 190, y);
+      // Ellipsise to the room left before the size column, so nothing overlaps.
+      const room = sw - 190 - 330;
+      let label = what;
+      while (label.length > 4 && g.measureText(label).width > room) label = label.slice(0, -2);
+      g.fillText(label === what ? what : label.trimEnd() + "…", sx + 190, y);
       g.textAlign = "right";
       g.fillText(`${l.size_mm[0]}×${l.size_mm[1]} mm${l.paper_size ? ` (${l.paper_size})` : ""}`, sx + sw - 130, y);
       const ok = vectorLike || l.verdict === "vector" || l.verdict === "sharp";
@@ -200,6 +204,13 @@ export async function renderProof(m, dataTex) {
   if (state.process === "embroidery") notes.push("Embroidery: placement only. Thread colours and stitch detail are confirmed on a digitised proof.");
   if (spec.surfaces.some((s) => s.layers.some((l) => l.background_removed))) notes.push("Background removed in the preview — we remove it properly from your original file.");
   if (spec.surfaces.some((s) => s.layers.some((l) => l.verdict === "too low"))) notes.push("Some artwork is below the resolution this product needs. We will contact you before printing.");
+  // A print area moved from its standard place is a production instruction.
+  for (const sf of spec.surfaces) {
+    const o = sf.position_offset_mm;
+    if (!o || (!o.down && !o.right)) continue;
+    const parts = [o.down ? `${Math.abs(o.down)} mm ${o.down > 0 ? "lower" : "higher"}` : "", o.right ? `${Math.abs(o.right)} mm ${o.right > 0 ? "to the right" : "to the left"}` : ""].filter(Boolean);
+    notes.unshift(`${sf.label}: print placed ${parts.join(" and ")} than the standard position.`);
+  }
   notes.push("Screen colours vary. This proof shows placement and size; your order is printed from your original files.");
   y += 80;
   g.font = "500 17px Archivo, sans-serif"; g.fillStyle = MUTED;

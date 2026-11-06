@@ -48,7 +48,7 @@ R2 suits this: no egress fees, so downloading large artwork is free.
 ```json
 [
   {
-    "AllowedOrigins": ["https://www.eminenceprinting.co.za"],
+    "AllowedOrigins": ["https://www.eminenceprinting.co.za", "https://eminenceprinting.co.za", "https://studio.eminenceprinting.co.za"],
     "AllowedMethods": ["PUT"],
     "AllowedHeaders": ["*"],
     "MaxAgeSeconds": 3600
@@ -56,7 +56,9 @@ R2 suits this: no egress fees, so downloading large artwork is free.
 ]
 ```
 
-4. Add a lifecycle rule that deletes objects under `jobs/` after **90 days**.
+4. Add a lifecycle rule that deletes objects under `tenants/` after **90 days**
+   (orders are filed at `tenants/<shop>/customers/…`; keep `tenants/<shop>/pricing.json`
+   by excluding it, or re-save prices once a quarter).
    Customer artwork is someone else's brand asset; don't keep it forever.
 
 AWS S3 or Backblaze B2 work the same way; set `S3_ENDPOINT` and `S3_REGION` to
@@ -74,7 +76,7 @@ match.
 | `S3_BUCKET` | `eminence-jobs` | Studio orders |
 | `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | from step 4 | Studio orders |
 | `JOB_SECRET` | 32+ random characters (`openssl rand -base64 32`) | signs upload sessions |
-| `STUDIO_ADMIN_PASSWORD` | a long passphrase, given only to the owner | saving prices at `/studio/admin/` (stored in the same bucket, `settings/pricing.json`) |
+| `STUDIO_ADMIN_PASSWORD` | a long passphrase, given only to the owner | saving prices at `/studio/admin/` (stored in the same bucket, `tenants/eminence/pricing.json`) |
 | `STUDIO_ADMIN_PASSWORDS` | `{"northside":"…"}` | one admin password per white-label shop (JSON map) — see `site/studio/WHITE-LABEL.md` |
 
 **Nothing breaks if these are missing.** The endpoints return 503. The contact form
