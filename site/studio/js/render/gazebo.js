@@ -19,7 +19,7 @@
  * the ground is drawn in the same 3D, so it turns with the gazebo.
  */
 
-import { ROOF_RISE, VALANCE_MM } from "../products.js";
+import { ROOF_RISE, VALANCE_MM, HALF_WALL_MM } from "../products.js";
 import { shade } from "./garment.js";
 
 const SUN = norm([-0.45, 0.85, 0.55]);
@@ -88,7 +88,10 @@ export function drawGazebo(canvas, { size, colour, texCanvas, yaw = -32, pitch =
   const fr = [-W / 2, LEG, D / 2], fl = [W / 2, LEG, D / 2], bl = [W / 2, LEG, -D / 2], br = [-W / 2, LEG, -D / 2];
   const peak = [0, PEAK, 0];
   const T = texCanvas;
-  const faces = [
+  // Without the canopy ticked, the bare frame shows (with any walls).
+  const ticked = Array.isArray(options.parts) ? options.parts : ["frame", "canopy"];
+  const bare = !ticked.includes("canopy");
+  const faces = bare ? [] : [
     { pts: [fr, fl, peak], uv: [[0, 1], [1, 1], [0.5, 0]], tex: T["canopy-front"], id: "canopy-front" },
     { pts: [bl, br, peak], uv: [[0, 1], [1, 1], [0.5, 0]], tex: repeat ? T["canopy-front"] : null },
     { pts: [fl, bl, peak], uv: [[0, 1], [1, 1], [0.5, 0]], tex: T["canopy-side"], id: "canopy-side" },
@@ -96,7 +99,7 @@ export function drawGazebo(canvas, { size, colour, texCanvas, yaw = -32, pitch =
   ];
   const drop = (a) => [a[0], a[1] - VAL, a[2]];
   const quad = (a, b, tex, id) => ({ pts: [a, b, drop(b), drop(a)], tex, id });
-  faces.push(
+  if (!bare) faces.push(
     quad(fr, fl, T["valance-front"], "valance-front"),
     quad(bl, br, repeat ? T["valance-front"] : null),
     quad(fl, bl, T["valance-side"], "valance-side"),
@@ -106,13 +109,19 @@ export function drawGazebo(canvas, { size, colour, texCanvas, yaw = -32, pitch =
   // shown when it carries a design or is selected (with or without the print
   // area outline). Wound TL→TR→BR→BL as seen from outside.
   const top = LEG - VAL;
+  const wallTop = options.wallHeight === "half" ? HALF_WALL_MM : top;
   const walls = {
-    "wall-back": [[W / 2, top, -D / 2], [-W / 2, top, -D / 2], [-W / 2, 0, -D / 2], [W / 2, 0, -D / 2]],
-    "wall-left": [[-W / 2, top, -D / 2], [-W / 2, top, D / 2], [-W / 2, 0, D / 2], [-W / 2, 0, -D / 2]],
-    "wall-right": [[W / 2, top, D / 2], [W / 2, top, -D / 2], [W / 2, 0, -D / 2], [W / 2, 0, D / 2]],
+    "wall-back": [[W / 2, wallTop, -D / 2], [-W / 2, wallTop, -D / 2], [-W / 2, 0, -D / 2], [W / 2, 0, -D / 2]],
+    "wall-left": [[-W / 2, wallTop, -D / 2], [-W / 2, wallTop, D / 2], [-W / 2, 0, D / 2], [-W / 2, 0, -D / 2]],
+    "wall-right": [[W / 2, wallTop, D / 2], [W / 2, wallTop, -D / 2], [W / 2, 0, -D / 2], [W / 2, 0, D / 2]],
   };
   for (const [id, pts] of Object.entries(walls))
-    if (T[id] || editing === id) faces.push({ pts, tex: T[id], id });
+    if (T[id] || editing === id || ticked.includes(id)) faces.push({ pts, tex: T[id], id });
+  // The bare frame's roof: the bars from each corner up to the peak, and the eaves.
+  if (bare) {
+    const roof = [[fr, peak], [fl, peak], [bl, peak], [br, peak], [fr, fl], [fl, bl], [bl, br], [br, fr]];
+    for (const [a, c] of roof) { const pa = P(a), pc = P(c); faces.push({ bar: true, a: pa, c: pc, pts: [a, c] }); }
+  }
 
   /* ground shadow */
   const sh = [[-W * 0.62, 0, D * 0.62], [W * 0.62, 0, D * 0.62], [W * 0.62, 0, -D * 0.62], [-W * 0.62, 0, -D * 0.62]].map(P);
@@ -124,6 +133,7 @@ export function drawGazebo(canvas, { size, colour, texCanvas, yaw = -32, pitch =
 
   /* frame: legs, foot plates and the scissor truss — depth-sorted with the faces */
   const items = faces.map((f) => {
+    if (f.bar) return { kind: "bar", a: f.a, b: f.c, z: (f.a[2] + f.c[2]) / 2 };
     const s = f.pts.map(P);
     return { kind: "face", f, s, z: s.reduce((a, p) => a + p[2], 0) / s.length };
   });
@@ -164,6 +174,12 @@ export function drawGazebo(canvas, { size, colour, texCanvas, yaw = -32, pitch =
       continue;
     }
     if (it.kind === "plate") { g.fillStyle = metalDark; poly(g, it.s); g.fill(); continue; }
+    if (it.kind === "bar") {
+      const k = F / (dist - it.z);
+      g.strokeStyle = shade(frame, 0.8); g.lineWidth = Math.max(1.5, 26 * k); g.lineCap = "round";
+      g.beginPath(); g.moveTo(it.a[0], it.a[1]); g.lineTo(it.b[0], it.b[1]); g.stroke();
+      continue;
+    }
     if (it.kind === "truss") {
       const k = F / (dist - it.z);
       g.strokeStyle = shade(frame, 0.85); g.lineWidth = Math.max(1, 16 * k); g.lineCap = "round";
@@ -180,7 +196,8 @@ export function drawGazebo(canvas, { size, colour, texCanvas, yaw = -32, pitch =
     if (f.pts.length === 4) n = n.map((x) => -x);
     const c = f.pts.reduce((a, p) => [a[0] + p[0] / f.pts.length, a[1] + p[1] / f.pts.length, a[2] + p[2] / f.pts.length], [0, 0, 0]);
     const facing = dot(n, sub(eye, c)) > 0;
-    const lit = facing ? 0.58 + 0.42 * Math.max(0, dot(n, SUN)) : 0.42;
+    // Seen from inside: a wall is lit through the open front, so it stays fairly light.
+    const lit = facing ? 0.58 + 0.42 * Math.max(0, dot(n, SUN)) : f.id?.startsWith("wall-") ? 0.68 : 0.42;
 
     g.fillStyle = facing ? colour : shade(colour, 0.8);
     poly(g, s); g.fill();

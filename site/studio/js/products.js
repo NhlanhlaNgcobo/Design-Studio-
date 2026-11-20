@@ -39,6 +39,23 @@ const MUG_GLAZE = [
   { hex: "#E8650F", name: "Orange" }, { hex: "#F2B8C6", name: "Pink" }, { hex: "#1E5631", name: "Green" },
   { hex: "#8EC5E8", name: "Sky blue" },
 ];
+/* Water bottles: PET caps, reusable bottle bodies and lids. */
+const BOTTLE_CAP = [
+  { hex: "#1F4FA0", name: "Blue" }, { hex: "#FFFFFF", name: "White" }, { hex: "#111111", name: "Black" },
+  { hex: "#B3202A", name: "Red" }, { hex: "#1E5631", name: "Green" }, { hex: "#8EC5E8", name: "Sky blue" },
+  { hex: "#F2B705", name: "Yellow" }, { hex: "#E8650F", name: "Orange" }, { hex: "#C4006B", name: "Pink" },
+];
+const BOTTLE_BODY = [
+  { hex: "#C9CDD2", name: "Stainless steel" }, { hex: "#FFFFFF", name: "White" }, { hex: "#111111", name: "Black" },
+  { hex: "#1C2541", name: "Navy" }, { hex: "#1F4FA0", name: "Royal" }, { hex: "#B3202A", name: "Red" },
+  { hex: "#1E5631", name: "Green" }, { hex: "#8EC5E8", name: "Sky blue" }, { hex: "#F2B8C6", name: "Pink" },
+  { hex: "#6B6F75", name: "Gunmetal" },
+];
+const BOTTLE_LID = [
+  { hex: "#111111", name: "Black" }, { hex: "#C9CDD2", name: "Silver" }, { hex: "#FFFFFF", name: "White" },
+  { hex: "#C8A26B", name: "Bamboo" }, { hex: "#1C2541", name: "Navy" }, { hex: "#B3202A", name: "Red" },
+  { hex: "#1F4FA0", name: "Royal" },
+];
 /* Printed display goods: the "colour" is the background printed edge to edge
  * behind the design — the quickest way to a branded banner. */
 const PRINT_BG = [
@@ -71,6 +88,9 @@ export const PROCESSES = {
   embroidery:  { label: "Embroidery", short: "Embroidery", note: "Stitched thread. Preview shows placement only — we send a digitised proof.", maxAreaMm: [120, 120], placementOnly: true },
   vinyl:       { label: "Cut vinyl", short: "Vinyl", note: "Single solid colours, cut to shape. Not for photos or gradients.", spotOnly: true },
   digital:     { label: "Digital print", short: "Digital", note: "Full colour, fine detail." },
+  label:       { label: "Printed waterproof label", short: "Label", note: "Full colour on waterproof vinyl, wrapped round the bottle. Survives the fridge and the cooler box." },
+  uv:          { label: "UV full-colour print", short: "UV print", note: "Printed straight onto the bottle: full colour, photos and white ink on any bottle colour. Hand-wash." },
+  engrave:     { label: "Laser engraving", short: "Engraved", note: "Burned into the coating or the steel. One tone, never wears off. Logos and text, not photos.", spotOnly: true },
   largeformat: { label: "Large-format print", short: "Large format", note: "Solvent/UV inks on outdoor media. Weatherproof." },
   sublimfabric:{ label: "Dye-sublimation fabric", short: "Sublimated fabric", note: "Printed into the fabric — washable, no glare, colour-fast outdoors." },
   wrap:        { label: "Printed wrap vinyl", short: "Wrap", note: "Cast vinyl, printed and laminated, fitted by our team. Quoted per vehicle after we see it." },
@@ -173,6 +193,59 @@ export const PRODUCTS = {
       { id: "handle", label: "Handle", colours: MUG_GLAZE },
     ],
     surfaces: [{ id: "wrap", label: "Wrap-around", view: "front", w: 200, h: 82, wrap: true }],
+  },
+
+  /* Bottled water with the customer's own label: still water, sealed, the
+   * printed label wrapped all the way round (with an 8 mm overlap at the
+   * seam). Or the labels only, for bottles they buy themselves. Sizes carry
+   * the bottle (d, bh: diameter and body height, mm) and the label (w × h). */
+  water: {
+    name: "Bottled water, own label", group: "Drinkware", render: "bottle",
+    blurb: "330 ml to 5 litres, with your printed label",
+    minDpi: 200, lead: "5–7 working days",
+    processes: ["label"],
+    stockLabel: "Label",
+    stocks: ["Gloss white vinyl", "Matt white vinyl", "Clear vinyl"],
+    sizes: [
+      { id: "330", label: "330 ml", style: "pet", d: 58, bh: 170, w: 190, h: 55, printTop: 71 },
+      { id: "500", label: "500 ml", style: "pet", d: 65, bh: 195, w: 212, h: 65, printTop: 81 },
+      { id: "750", label: "750 ml", style: "pet", d: 72, bh: 225, w: 234, h: 75, printTop: 93 },
+      { id: "1000", label: "1 litre", style: "pet", d: 80, bh: 250, w: 259, h: 85, printTop: 102 },
+      { id: "1500", label: "1.5 litre", style: "pet", d: 90, bh: 290, w: 291, h: 100, printTop: 118 },
+      { id: "5000", label: "5 litre (with handle)", style: "pet5", d: 165, bh: 300, w: 526, h: 140, printTop: 110 },
+    ],
+    defaultSize: "500",
+    printedBase: true, colours: PRINT_BG, colourLabel: "Label colour",
+    parts: [{ id: "cap", label: "Cap", colours: BOTTLE_CAP }],
+    qtyTiers: [24, 48, 100, 250, 500],
+    options: [
+      { id: "supply", type: "choice", label: "Order", default: "filled", choices: [
+        { id: "filled", label: "Water with your label", hint: "Still water, sealed and labelled, packed in cases" },
+        { id: "labels", label: "Labels only", hint: "Printed and cut, to stick on your own bottles" },
+      ] },
+    ],
+    surfaces: [{ id: "wrap", label: "Label (wrap-around)", view: "front", wrap: true, bleedMm: 2, safeMm: 5, fullBleed: true }],
+  },
+
+  /* Reusable bottles, branded: UV printed, sublimated (white only) or laser
+   * engraved. The print area stops short of the full round, as on the
+   * machines that print them. */
+  bottle: {
+    name: "Water bottles", group: "Drinkware", render: "bottle",
+    blurb: "Sports bottles, steel flasks and gym jugs, branded",
+    minDpi: 200, lead: "3–5 working days",
+    processes: ["uv", "engrave", "sublimation"],
+    sizes: [
+      { id: "500", label: "500 ml aluminium sports bottle", style: "sport", d: 70, bh: 200, w: 180, h: 100, printTop: 64 },
+      { id: "750", label: "750 ml stainless flask (double-wall)", style: "flask", d: 73, bh: 245, w: 190, h: 130, printTop: 70 },
+      { id: "1000", label: "1 litre stainless flask (double-wall)", style: "flask", d: 80, bh: 270, w: 210, h: 150, printTop: 74 },
+      { id: "2200", label: "2.2 litre gym jug", style: "jug", d: 115, bh: 250, w: 300, h: 140, printTop: 68 },
+    ],
+    defaultSize: "750",
+    colours: BOTTLE_BODY, colourLabel: "Bottle",
+    parts: [{ id: "cap", label: "Lid", colours: BOTTLE_LID }],
+    qtyTiers: [1, 10, 25, 50, 100],
+    surfaces: [{ id: "wrap", label: "Wrap-around", view: "front", wrap: true }],
   },
 
   /* ───────────────────────────── print ───────────────────────────── */
@@ -305,20 +378,95 @@ export const PRODUCTS = {
     surfaces: [{ id: "face", label: "Sign face", view: "front", bleedMm: 0, safeMm: 50, fullBleed: true }],
   },
 
+  /* Welcome boards: the printed sign at a wedding, an event or a reception,
+   * usually on an easel. Sold by size and board material; the display
+   * (easel, table-top feet) is extra. Portrait or landscape. */
+  welcomeboard: {
+    name: "Welcome boards", group: "Signage", render: "easel", details: "board",
+    blurb: "Wedding, event and reception signs, on an easel",
+    minDpi: 150, lead: "2–3 working days",
+    processes: ["digital"],
+    stockLabel: "Board",
+    stocks: ["5 mm foam board", "5 mm PVC board", "3 mm acrylic, clear", "5 mm acrylic, frosted", "3 mm ACM (aluminium)", "3 mm correx"],
+    sizes: [
+      { id: "A2", label: "A2 · 420 × 594", w: 420, h: 594 }, { id: "A1", label: "A1 · 594 × 841", w: 594, h: 841 },
+      { id: "A0", label: "A0 · 841 × 1189", w: 841, h: 1189 }, { id: "600x900", label: "600 × 900", w: 600, h: 900 },
+      { id: "900x1200", label: "900 × 1200", w: 900, h: 1200 }, { id: "600sq", label: "600 × 600 square", w: 600, h: 600 },
+      // Big boards, up to a full 1220 × 2440 sheet of foam board, acrylic or ACM.
+      { id: "1000x1500", label: "1000 × 1500", w: 1000, h: 1500 }, { id: "1200x1800", label: "1200 × 1800", w: 1200, h: 1800 },
+      { id: "1200x2400", label: "1200 × 2400 (full sheet)", w: 1200, h: 2400 },
+    ],
+    defaultSize: "A1",
+    orientable: true,
+    printedBase: true, colours: PRINT_BG,
+    qtyTiers: [1, 2, 3, 5, 10],
+    options: [
+      { id: "orientation", type: "choice", label: "Shape", default: "portrait", choices: [
+        { id: "portrait", label: "Portrait", hint: "Taller than wide" },
+        { id: "landscape", label: "Landscape", hint: "Wider than tall" },
+      ] },
+      { id: "stand", type: "choice", label: "Display", default: "easel", choices: [
+        // A 1.6 m easel holds boards up to 900 × 1200; bigger boards need the
+        // heavy-duty floor easel. Table-top feet suit A1 and smaller.
+        { id: "easel", label: "Wooden easel", hint: "Foldable, about 1.6 m · up to 900 × 1200", sizes: ["A2", "A1", "A0", "600x900", "900x1200", "600sq"] },
+        { id: "metal", label: "Black metal easel", hint: "Adjustable, about 1.6 m · up to 900 × 1200", sizes: ["A2", "A1", "A0", "600x900", "900x1200", "600sq"] },
+        { id: "feet", label: "Table-top feet", hint: "Clear stands, for a table · A1 and smaller", sizes: ["A2", "A1", "600x900", "600sq"] },
+        { id: "heavy", label: "Heavy-duty display easel", hint: "Floor-standing, for big boards up to 2.4 m" },
+        { id: "none", label: "Board only", hint: "Your own easel or a wall" },
+      ] },
+    ],
+    surfaces: [{ id: "face", label: "Board", view: "front", bleedMm: 3, safeMm: 15, fullBleed: true }],
+  },
+
   gazebo: {
     name: "Gazebo", group: "Banners & display", render: "gazebo",
     blurb: "Steel frame, sublimated canopy",
     minDpi: 100, lead: "5–7 working days",
     processes: ["sublimfabric"],
-    sizes: [{ id: "3x3", label: "3 × 3 m", w: 3000, d: 3000, legH: 2100 }, { id: "4.5x3", label: "4.5 × 3 m", w: 4500, d: 3000, legH: 2100 }, { id: "6x3", label: "6 × 3 m", w: 6000, d: 3000, legH: 2100 }],
+    sizes: [{ id: "2x2", label: "2 × 2 m", w: 2000, d: 2000, legH: 2100 }, { id: "3x3", label: "3 × 3 m", w: 3000, d: 3000, legH: 2100 }, { id: "4.5x3", label: "4.5 × 3 m", w: 4500, d: 3000, legH: 2100 }, { id: "6x3", label: "6 × 3 m", w: 6000, d: 3000, legH: 2100 }],
+    defaultSize: "3x3",
     colours: [{ hex: "#FFFFFF", name: "White" }, { hex: "#111111", name: "Black" }, { hex: "#1F4FA0", name: "Royal" }, { hex: "#B3202A", name: "Red" }, { hex: "#1E5631", name: "Green" }, { hex: "#F2B705", name: "Gold" }, { hex: "#1C2541", name: "Navy" }],
     qtyTiers: [1, 2, 3, 5],
     // The frame is a separate choice from the canopy fabric.
     parts: [{ id: "frame", label: "Frame", colours: [{ hex: "#C9CDD2", name: "Silver" }, { hex: "#1A1C20", name: "Black" }, { hex: "#F2F2F2", name: "White" }] }],
     printedBase: true,                       // the canopy colour is printed, so it is in the print file
-    // Most gazebos are printed the same on opposite sides. On by default; off
-    // means the back and far side stay plain.
-    options: [{ id: "repeat", label: "Repeat front & side designs on the back and far side", default: true }],
+    /* Gazebos are sold in parts, the way SA suppliers sell them, and any mix
+     * can be ticked: frame, printed canopy & valance, each wall, accessories.
+     * Frame + canopy together is a complete gazebo (bundle price, bag included).
+     * Steel frames and half walls come in 2 × 2 and 3 × 3 m only — a choice's
+     * `sizes` limits it; `showIf` hides what doesn't apply. */
+    options: [
+      { id: "parts", type: "multi", label: "What to order", default: ["frame", "canopy"], choices: [
+        { id: "frame", label: "Frame", hint: "Pop-up frame, carry bag, pegs and ropes" },
+        { id: "canopy", label: "Printed canopy & valance", hint: "The roof and its skirt, printed" },
+        { id: "wall-back", label: "Back wall", hint: "Printed wall across the back" },
+        { id: "wall-left", label: "Left wall", hint: "Printed side wall" },
+        { id: "wall-right", label: "Right wall", hint: "Printed side wall" },
+        { id: "weights", label: "Leg weights", hint: "Set of 4 — for wind" },
+        { id: "bag", label: "Wheeled carry bag", hint: "Extra or replacement" },
+        { id: "toolkit", label: "Tool kit", hint: "Pegs, ropes and mallet" },
+      ] },
+      /* The frame grades SA suppliers sell. With the frame ticked it's the frame
+       * being bought; without it, it's the customer's own frame, so the canopy
+       * and walls are made to fit it. */
+      { id: "frameType", type: "choice", label: (o) => (o.parts?.includes("frame") ? "Frame type" : "Your frame type (so the print fits)"), default: "alu40", choices: [
+        { id: "steel", label: "Standard steel, 32 mm", hint: "Budget, for occasional use · 2 × 2 and 3 × 3 m", sizes: ["2x2", "3x3"] },
+        { id: "steelhex", label: "Heavy-duty steel, 45 mm hex", hint: "Strong and stable, heavier · up to 4.5 × 3 m", sizes: ["2x2", "3x3", "4.5x3"] },
+        { id: "alu40", label: "Aluminium, 40 mm hex", hint: "Light, for regular events · every size" },
+        { id: "aluminium", label: "Heavy-duty aluminium, 50 mm hex", hint: "Pro grade, weekly use and wind · every size" },
+      ] },
+      { id: "yourFrame", type: "text", label: "Your frame — make and size", placeholder: "e.g. Ovation aluminium, 3 × 3 m", default: "",
+        showIf: (o) => !o.parts?.includes("frame") && o.parts?.some((x) => x === "canopy" || x.startsWith("wall-")) },
+      { id: "wallHeight", type: "choice", label: "Walls", default: "full", showIf: (o) => o.parts?.some((x) => x.startsWith("wall-")), choices: [
+        { id: "full", label: "Full height", hint: "Ground to the valance" },
+        { id: "half", label: "Half height", hint: "About 1 m · 2 × 2 and 3 × 3 m", sizes: ["2x2", "3x3"] },
+      ] },
+      { id: "wallSides", type: "choice", label: "Wall print", default: "single", showIf: (o) => o.parts?.some((x) => x.startsWith("wall-")), choices: [
+        { id: "single", label: "One side", hint: "Print shows through, mirrored" },
+        { id: "double", label: "Both sides", hint: "Reads right from inside too" },
+      ] },
+      { id: "repeat", label: "Repeat front & side designs on the back and far side", default: true, showIf: (o) => o.parts?.includes("canopy") },
+    ],
     // Canopy and valance resolve against the chosen size — see surfaceSize().
     surfaces: [
       { id: "canopy-front", label: "Roof — front", view: "3d", shape: "triangle", part: "canopy", side: "front" },
@@ -360,7 +508,32 @@ export function moveLimits(product, surf) {
   return { x: [-60, 60], y: [-40, 160] };
 }
 
-export function surfaceSize(product, sizeOpt, surf) {
+/** Half walls are about 1 m tall, hung from the frame's middle bars. */
+export const HALF_WALL_MM = 1000;
+
+/** The gazebo parts in an order: what is ticked, plus any wall that carries a design. */
+export function gazeboParts(o = {}, designedWalls = []) {
+  return [...new Set([...(o.parts || []), ...designedWalls])];
+}
+
+/** What a gazebo order is, in a line — for the proof, the WhatsApp message and the email. */
+export const FRAME_TYPES = { steel: "standard steel 32 mm", steelhex: "heavy-duty steel 45 mm hex", alu40: "aluminium 40 mm hex", aluminium: "heavy-duty aluminium 50 mm hex" };
+
+export function gazeboSummary(o = {}, designedWalls = []) {
+  const parts = gazeboParts(o, designedWalls), has = (x) => parts.includes(x);
+  const frame = FRAME_TYPES[o.frameType] ?? FRAME_TYPES.alu40;
+  const walls = parts.filter((x) => x.startsWith("wall-"));
+  const out = [];
+  if (has("frame") && has("canopy")) out.push(`Complete gazebo, ${frame} frame`);
+  else if (has("frame")) out.push(`Frame only, ${frame}`);
+  else if (has("canopy")) out.push("Canopy print only");
+  if (walls.length) out.push(`${walls.map((w) => w.slice(5)).join(", ")} wall${walls.length > 1 ? "s" : ""} — ${o.wallHeight === "half" ? "half" : "full"} height, printed ${o.wallSides === "double" ? "both sides" : "one side"}`);
+  if (!has("frame") && (has("canopy") || walls.length)) out.push(`for the customer's ${frame} frame${o.yourFrame ? `: ${o.yourFrame}` : ""}`);
+  for (const [k, l] of [["weights", "leg weights"], ["bag", "carry bag"], ["toolkit", "tool kit"]]) if (has(k)) out.push(l);
+  return out.join(" · ") || "Nothing ticked";
+}
+
+export function surfaceSize(product, sizeOpt, surf, options = {}) {
   if (surf.w && surf.h) return { w: surf.w, h: surf.h };
   if (product.render === "vehicle") {
     // Side: wheelbase-length panel below the windows; rear: the two doors.
@@ -373,8 +546,9 @@ export function surfaceSize(product, sizeOpt, surf) {
     if (surf.part === "canopy")
       return { w: span, h: Math.round(Math.hypot(run / 2, Math.min(sizeOpt.w, sizeOpt.d) * ROOF_RISE)) };
     if (surf.part === "valance") return { w: span, h: VALANCE_MM };
-    return { w: surf.side === "back" ? sizeOpt.w : sizeOpt.d, h: sizeOpt.legH - VALANCE_MM };
+    return { w: surf.side === "back" ? sizeOpt.w : sizeOpt.d, h: options.wallHeight === "half" ? HALF_WALL_MM : sizeOpt.legH - VALANCE_MM };
   }
+  if (product.orientable && options.orientation === "landscape") return { w: Math.max(sizeOpt.w, sizeOpt.h), h: Math.min(sizeOpt.w, sizeOpt.h) };
   return { w: sizeOpt.w, h: sizeOpt.h };
 }
 

@@ -179,7 +179,60 @@ const WELCOME = [
   },
 ];
 
-export const TEMPLATES = { card: CARD, welcome: WELCOME };
+/* ───────────────────────────── welcome boards ─────────────────────────────
+ * Sized from the board, so one layout fits A2 to 900 × 1200, either way up. */
+FIELDS.board = [
+  ["heading", "Heading", "Welcome"],
+  ["names", "Names or event", "Thandi & Sipho"],
+  ["line", "Line under it", "to our wedding celebration"],
+  ["date", "Date", "12 December 2026"],
+  ["host", "Venue or business", "Zululand Country Club"],
+];
+const BOARD = [
+  {
+    id: "wedding", name: "Wedding",
+    make: (a, c) => {
+      const u = Math.min(a.w, a.h) / 100, H = a.h / 2;
+      return { front: [bg(a, "#FBF8F2"),
+        rect(0, 0, a.w - a.safe * 2 - 6 * u, a.h - a.safe * 2 - 6 * u, c.brand, { radius: 1.5 * u }),
+        rect(0, 0, a.w - a.safe * 2 - 7.2 * u, a.h - a.safe * 2 - 7.2 * u, "#FBF8F2", { radius: 1.2 * u }),
+        text("heading", { anchor: "center", ax: 0, y: -H * 0.42, size: 18 * u, font: "Great Vibes", weight: 400, colour: c.brand, align: "center" }),
+        text("line", { anchor: "center", ax: 0, y: -H * 0.12, size: 3.6 * u, weight: 500, colour: c.ink, align: "center", spacing: 0.12 }),
+        text("names", { anchor: "center", ax: 0, y: H * 0.12, size: 9 * u, font: "Playfair Display", weight: 700, colour: c.ink, align: "center" }),
+        rect(0, H * 0.32, 18 * u, 0.5 * u, c.brand),
+        text("date", { anchor: "center", ax: 0, y: H * 0.45, size: 4 * u, weight: 600, colour: c.ink, align: "center", spacing: 0.08 }),
+        text("host", { anchor: "center", ax: 0, y: H * 0.6, size: 3.2 * u, weight: 500, colour: c.brand, align: "center" })] };
+    },
+  },
+  {
+    id: "event", name: "Event",
+    make: (a, c) => {
+      const u = Math.min(a.w, a.h) / 100, H = a.h / 2;
+      return { front: [bg(a, c.brand),
+        text("heading", { anchor: "center", ax: 0, y: -H * 0.4, size: 20 * u, font: "Anton", weight: 400, colour: "#FFFFFF", align: "center", spacing: 0.04 }),
+        text("names", { anchor: "center", ax: 0, y: -H * 0.05, size: 8 * u, font: "Montserrat", weight: 800, colour: "#FFFFFF", align: "center" }),
+        text("line", { anchor: "center", ax: 0, y: H * 0.15, size: 3.6 * u, weight: 500, colour: "#FFFFFF", align: "center" }),
+        rect(0, H * 0.42, a.w + a.bleed * 2, 22 * u, "#FFFFFF"),
+        text("date", { anchor: "center", ax: 0, y: H * 0.38, size: 4.4 * u, weight: 800, colour: c.brand, align: "center", spacing: 0.1 }),
+        text("host", { anchor: "center", ax: 0, y: H * 0.48, size: 3.4 * u, weight: 600, colour: c.ink, align: "center" })] };
+    },
+  },
+  {
+    id: "business", name: "Business",
+    make: (a, c, ctx) => {
+      const u = Math.min(a.w, a.h) / 100, H = a.h / 2;
+      return { front: [bg(a, "#FFFFFF"),
+        rect(0, -H + 6 * u, a.w + a.bleed * 2, 12 * u + a.bleed * 2, c.brand),
+        logo({ x: 0, y: -H * 0.42, w: a.w * 0.5, h: 18 * u }, { ...ctx, fieldOf: "welcome" }, c.brand),
+        text("heading", { anchor: "center", ax: 0, y: -H * 0.05, size: 14 * u, font: "Montserrat", weight: 800, colour: c.ink, align: "center" }),
+        text("names", { anchor: "center", ax: 0, y: H * 0.2, size: 6 * u, font: "Montserrat", weight: 600, colour: c.brand, align: "center" }),
+        text("line", { anchor: "center", ax: 0, y: H * 0.36, size: 3.6 * u, weight: 500, colour: c.ink, align: "center" }),
+        text("date", { anchor: "center", ax: 0, y: H * 0.5, size: 3.4 * u, weight: 600, colour: c.ink, align: "center" })] };
+    },
+  },
+];
+
+export const TEMPLATES = { card: CARD, welcome: WELCOME, board: BOARD };
 
 /**
  * Lay out a template. `measure(layer)` → { w, h } (fonts must be loaded), so

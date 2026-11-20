@@ -10,9 +10,9 @@
  */
 
 import { TENANT, shop, applyTheme, waLink } from "./tenant.js";
-import { moveLimits } from "./products.js";
+import { moveLimits, gazeboSummary } from "./products.js";
 import { PRODUCTS, GROUPS, PROCESSES, PAPER, surfaceSize, effectiveDpi, dpiVerdict, isDark, contrastRatio, luminance, paperFor, largestPaperIn, scaleToPaper } from "./products.js";
-import { quote as priceQuote, rand, rand2, prices, loadPrices } from "./pricing.js";
+import { quote as priceQuote, rand, rand2, prices, loadPrices, gazeboPartPrice } from "./pricing.js";
 import { loadAsset, applyBackgroundRemoval, aiBackgroundRemoval, restoreBackground } from "./artwork.js";
 import { History, uid, FONTS, newTextLayer, carryOver, saveDraft, loadDraft, clearDraft, setDraftScope } from "./doc.js";
 import { layerSize, layerCorners, designBounds, composeSurface, ensureFonts, qrModules } from "./compose.js";
@@ -83,7 +83,7 @@ const state = {
 };
 /* Products you can turn by dragging: true 3D (gazebo, mug), or turned like a
  * card on its stand (flag, banners, boards). */
-const TURN_BY_RENDER = { gazebo: "orbit", mug: "spin", flag: "card", banner: "card" };
+const TURN_BY_RENDER = { gazebo: "orbit", mug: "spin", bottle: "spin", flag: "card", banner: "card" };
 const TURN = new Proxy({}, { get: (_, r) => (r === "banner" && P().kind === "pvc" ? null : TURN_BY_RENDER[r]) });
 const assets = new Map();
 const history = new History();
@@ -99,7 +99,7 @@ const selLayer = () => layers().find((l) => l.id === state.selected) ?? null;
 const designedIds = () => Object.keys(state.designs).filter((k) => state.designs[k]?.length && P().surfaces.some((s) => s.id === k));
 
 function areaOf(s = surf()) {
-  const a = surfaceSize(P(), S(), s);
+  const a = surfaceSize(P(), S(), s, state.options);
   return { w: a.w, h: a.h, bleed: s.bleedMm || 0, safe: s.safeMm || 0, shape: s.shape || "rect", hiddenBottom: s.hiddenBottomMm || 0 };
 }
 /** The colour of the thing being printed on, for the editor and contrast checks. */
@@ -119,7 +119,7 @@ function selectProduct(id, { keepDesign = true } = {}) {
   const source = transferSource ?? { designs: state.designs, productId: state.productId };
   const carried = keepDesign && from !== to ? carryOver(source.designs, PRODUCTS[source.productId], to, (p, s) => surfaceSize(p, p.sizes[0], s)) : keepDesign ? state.designs : {};
   state.productId = id;
-  state.sizeId = to.sizes.find((s) => s.id === "M")?.id ?? to.sizes[0].id;
+  state.sizeId = to.sizes.find((s) => s.id === (to.defaultSize ?? "M"))?.id ?? to.sizes[0].id;
   state.colour = to.colours[0].hex;
   state.process = to.processes[0];
   state.stock = to.stocks?.[0] ?? null;
@@ -159,23 +159,40 @@ function renderProductPanel() {
   // The same colours on the editing canvas, so a design for a black shirt is
   // made on black — no switching to the preview to find out.
   $("#editColours").innerHTML = $("#colours").innerHTML;
-  $("#editColoursWrap > span").textContent = { mug: "Outside", gazebo: "Canopy" }[p.render] ?? (p.printedBase ? "Background" : "Garment");
+  $("#editColoursWrap > span").textContent = p.colourLabel ?? { mug: "Outside", gazebo: "Canopy" }[p.render] ?? (p.printedBase ? "Background" : "Garment");
   renderDetails();
   // Parts with their own colour: a gazebo's frame, a mug's inside and handle.
   $("#partFields").innerHTML = (p.parts || []).map((pt) => `
     <div class="field"><div class="label"><span id="l-part-${pt.id}">${esc(pt.label)}</span> <span class="val">${esc(pt.colours.find((c) => c.hex === state.parts[pt.id])?.name ?? "")}</span></div>
     <div class="swatches" role="radiogroup" aria-labelledby="l-part-${pt.id}">${pt.colours.map((c) => `<button class="sw" role="radio" data-part="${pt.id}" data-pc="${c.hex}" aria-checked="${c.hex === state.parts[pt.id]}" aria-label="${esc(c.name)}" title="${esc(c.name)}" style="background:${c.hex}"></button>`).join("")}</div></div>`).join("");
-  $("#l-colour").textContent = p.render === "mug" ? "Outside" : p.render === "gazebo" ? "Canopy" : p.printedBase ? "Background colour" : "Colour";
+  $("#l-colour").textContent = p.colourLabel ? p.colourLabel : p.render === "mug" ? "Outside" : p.render === "gazebo" ? "Canopy" : p.printedBase ? "Background colour" : "Colour";
   $("#editColoursWrap").hidden = p.colours.length < 2;
   $("#canvasWrap").style.setProperty("--garment", material());
   $("#canvasWrap").classList.toggle("dark", luminance(material()) < 0.35);
   $("#colourName").textContent = colourName();
 
+  $('label[for="stock"]').textContent = p.stockLabel ?? "Paper";
   $("#stockField").hidden = !p.stocks;
   if (p.stocks) $("#stock").innerHTML = p.stocks.map((s) => `<option${s === state.stock ? " selected" : ""}>${esc(s)}</option>`).join("");
 
+  normaliseOptions();
   $("#optionsField").hidden = !p.options;
-  $("#optionsField").innerHTML = (p.options || []).map((o) => `<label class="opt-row"><input type="checkbox" data-o="${o.id}"${state.options[o.id] ? " checked" : ""}> ${esc(o.label)}</label>`).join("");
+  $("#optionsField").innerHTML = (p.options || []).filter((o) => !o.showIf || o.showIf(state.options)).map((o) => {
+    if (o.type === "choice") return `<fieldset class="opt-choice"><legend>${esc(typeof o.label === "function" ? o.label(state.options) : o.label)}</legend>${o.choices.map((c) => {
+      const off = c.sizes && !c.sizes.includes(state.sizeId);
+      return `<label class="choice${off ? " off" : ""}"><input type="radio" name="opt-${o.id}" data-o="${o.id}" value="${c.id}"${state.options[o.id] === c.id ? " checked" : ""}${off ? " disabled" : ""}><span><b>${esc(c.label)}</b>${c.hint ? `<small>${esc(c.hint)}</small>` : ""}</span></label>`;
+    }).join("")}</fieldset>`;
+    if (o.type === "multi") {
+      const on = state.options[o.id] || [];
+      const q = P().render === "gazebo" ? quoteInput() : null;
+      return `<fieldset class="opt-choice opt-multi"><legend>${esc(o.label)} <small>tick any mix — the price adds up</small></legend>${o.choices.map((c) => {
+        const each = q ? gazeboPartPrice(q, c.id) : null;
+        return `<label class="choice"><input type="checkbox" data-o="${o.id}" value="${c.id}"${on.includes(c.id) ? " checked" : ""}><span><b>${esc(c.label)}</b>${c.hint ? `<small>${esc(c.hint)}</small>` : ""}</span>${each != null ? `<em>${on.includes(c.id) ? "" : "+"}${rand(each)}</em>` : ""}</label>`;
+      }).join("")}</fieldset>`;
+    }
+    if (o.type === "text") return `<label class="opt-text">${esc(o.label)}<input data-o="${o.id}" value="${esc(state.options[o.id] ?? "")}" placeholder="${esc(o.placeholder ?? "")}"></label>`;
+    return `<label class="opt-row"><input type="checkbox" data-o="${o.id}"${state.options[o.id] ? " checked" : ""}> ${esc(o.label)}</label>`;
+  }).join("");
 
   renderProcesses();
 }
@@ -196,7 +213,37 @@ $("#scenes").addEventListener("click", (e) => { const b = e.target.closest("[dat
 for (const id of ["#colours", "#editColours"]) $(id).addEventListener("click", (e) => { const b = e.target.closest("[data-c]"); if (!b) return; state.colour = b.dataset.c; renderProductPanel(); refreshAll(); commit(); });
 $("#processes").addEventListener("click", (e) => { const b = e.target.closest("[data-pr]"); if (!b) return; state.process = b.dataset.pr; renderProcesses(); refreshAll(); commit(); });
 $("#stock").addEventListener("change", (e) => { state.stock = e.target.value; refreshQuote(); commit(); });
-$("#optionsField").addEventListener("change", (e) => { const i = e.target.closest("[data-o]"); if (!i) return; state.options[i.dataset.o] = i.checked; refreshAll(); commit(); });
+$("#optionsField").addEventListener("change", (e) => {
+  const i = e.target.closest("[data-o]"); if (!i) return;
+  const def = (P().options || []).find((o) => o.id === i.dataset.o);
+  if (def?.type === "multi") {
+    const set = new Set(state.options[def.id] || []);
+    if (i.checked) set.add(i.value); else set.delete(i.value);
+    state.options[def.id] = def.choices.map((c) => c.id).filter((id) => set.has(id));   // keep the list's order
+  } else state.options[i.dataset.o] = i.type === "checkbox" ? i.checked : i.value;
+  // A choice can change which other choices apply, and the parts' prices.
+  if (i.type === "radio" || def?.type === "multi") { renderProductPanel(); if (P().render === "gazebo") clearTextures(); }
+  refreshAll(); commit();
+});
+let optT;
+$("#optionsField").addEventListener("input", (e) => {
+  const i = e.target.closest('input[type="text"],input:not([type])'); if (!i?.dataset.o) return;
+  state.options[i.dataset.o] = i.value;
+  clearTimeout(optT); optT = setTimeout(() => { refreshQuote(); commit(); }, 300);
+});
+/* Choices limited to some sizes (steel frames, half walls) fall back when the size changes. */
+function normaliseOptions() {
+  if (P().render === "gazebo" && !Array.isArray(state.options.parts)) {
+    const as = state.options.orderAs;
+    state.options.parts = as === "canopy" ? ["canopy"] : as === "frame" ? ["frame"] : as === "walls" ? [] : ["frame", "canopy"];
+    delete state.options.orderAs;
+  }
+  for (const o of P().options || []) {
+    if (o.type !== "choice") continue;
+    const ok = (id) => o.choices.some((c) => c.id === id && (!c.sizes || c.sizes.includes(state.sizeId)));
+    if (!ok(state.options[o.id])) state.options[o.id] = o.choices.find((c) => !c.sizes || c.sizes.includes(state.sizeId)).id;
+  }
+}
 
 /* ─────────────────────────── panel: your details & templates ───────────────────────────
  * Business and welcome cards are designed from the customer's details, the
@@ -204,7 +251,9 @@ $("#optionsField").addEventListener("change", (e) => { const i = e.target.closes
 const fieldsOf = () => FIELDS[P().details] ?? [];
 const detail = (k) => state.details[k]?.trim() ? state.details[k] : fieldsOf().find(([f]) => f === k)?.[2] ?? "";
 const allDetails = () => Object.fromEntries(fieldsOf().map(([k]) => [k, detail(k)]));
-const brand = () => state.brand ?? brandInks().find((c) => !/^#(FFFFFF|14161A|000000)$/i.test(c)) ?? "#C4006B";
+// The brand colour: one the customer chose, else the first strong colour in the
+// design — never a pale background (a cream wedding board isn't a brand colour).
+const brand = () => state.brand ?? brandInks().find((c) => !/^#(14161A|000000)$/i.test(c) && luminance(c) < 0.7) ?? "#C4006B";
 
 function renderDetails() {
   const kind = P().details;
@@ -251,11 +300,15 @@ $("#templates").addEventListener("click", async (e) => {
   const b = e.target.closest("[data-tpl]"); if (!b) return;
   const t = TEMPLATES[P().details].find((x) => x.id === b.dataset.tpl);
   const built = await layoutTemplate(t);
+  // Templates design a "front" (and maybe a "back"); a one-sided product such as
+  // a welcome board puts the front on its only surface.
+  const ids = P().surfaces.map((s) => s.id);
+  const target = { front: ids.includes("front") ? "front" : ids[0], back: ids.includes("back") ? "back" : null };
   for (const side of ["front", "back"]) {
-    if (!P().surfaces.some((s) => s.id === side)) continue;
-    state.designs[side] = (built[side] || []).map((l) => ({ ...l, id: uid() }));
+    if (!target[side] || !built[side]) continue;
+    state.designs[target[side]] = built[side].map((l) => ({ ...l, id: uid() }));
   }
-  state.surfaceId = "front"; state.selected = null;
+  state.surfaceId = target.front; state.selected = null;
   afterStructuralChange();
   toast(`${t.name} applied to the front and back. Undo brings your previous design back.`);
 });
@@ -312,7 +365,7 @@ function renderSurfaces() {
   const names = { front: "Front", back: "Back", left: "Left", right: "Right", rear: "Rear" };
   $("#views").innerHTML = views.length > 1 && !views.includes("3d")
     ? views.map((v) => `<button class="view" role="tab" data-v="${v}" aria-selected="${v === current}">${names[v] ?? v}</button>`).join("") : "";
-  const hint = { gazebo: "Drag to walk round it, up or down to look from above · scroll or pinch to zoom", mug: "Drag to turn the mug · scroll to zoom", flag: "Drag to turn it", banner: "Drag to turn it" }[p.render];
+  const hint = { gazebo: "Drag to walk round it, up or down to look from above · scroll or pinch to zoom", mug: "Drag to turn the mug · scroll to zoom", bottle: "Drag to turn the bottle · scroll to zoom", flag: "Drag to turn it", banner: "Drag to turn it" }[p.render];
   $("#scenes").hidden = p.render !== "gazebo";
   $("#scenes").innerHTML = SCENES.map((s) => `<button role="radio" data-scene="${s.id}" aria-checked="${s.id === state.scene}">${s.label}</button>`).join("");
   $("#turnTools").hidden = !TURN[p.render];
@@ -437,7 +490,7 @@ async function updateTextures(ids = P().surfaces.map((s) => s.id)) {
 
 function renderCtx(extra = {}) {
   return { productId: state.productId, product: P(), size: S(), colour: state.colour, tex, texCanvas,
-    active: state.surfaceId, yaw: state.yaw, pitch: state.pitch, zoom: state.zoom, parts: state.parts, scene: state.scene, offsets: state.offsets, options: state.options, stock: state.stock, ...extra };
+    active: state.surfaceId, yaw: state.yaw, pitch: state.pitch, zoom: state.zoom, parts: state.parts, scene: state.scene, offsets: state.offsets, options: state.options, stock: state.stock, process: state.process, ...extra };
 }
 function updateMockup() { if (state.colour) return renderMockup($("#stage"), renderCtx({ showGuides: $('#showGuides').checked })); }
 new ResizeObserver(() => updateMockup()).observe($('#stage'));
@@ -910,7 +963,10 @@ function runChecks() {
   const proc = PROCESSES[state.process];
   if (!ids.length) return [{ level: "info", text: "Add your logo or text to check it and price the printing." }];
 
-  if (proc.lightOnly && isDark(state.colour) && p.render !== "mug")
+  if (p.render === "bottle" && state.process === "sublimation" && state.colour.toUpperCase() !== "#FFFFFF")
+    out.push({ level: "bad", text: "Sublimation bottles come in white only: it needs their white coating.", fix: ["Use UV print", () => { state.process = "uv"; renderProcesses(); refreshAll(); commit(); }] });
+  if (state.process === "engrave") out.push({ level: "info", text: "Laser engraving is one tone: the preview shows the shade it comes out in, whatever colours the artwork has." });
+  if (proc.lightOnly && isDark(state.colour) && !["mug", "bottle"].includes(p.render))
     out.push({ level: "bad", text: `${proc.label} only works on white or light polyester.`, fix: p.processes.includes("dtf") ? ["Use DTF instead", () => { state.process = "dtf"; renderProcesses(); refreshAll(); commit(); }] : null });
 
   for (const id of ids) {
@@ -1038,8 +1094,13 @@ function currentQuote() {
     const s = surf(id), area = areaOf(s), b = designBounds(state.designs[id], assets, area);
     return { surfaceId: id, label: s.label, areaMm2: b ? b.w * b.h : 0, maxSideMm: b ? Math.max(b.w, b.h) : 0, colours: inkCount(id) };
   });
-  return priceQuote({ productId: state.productId, product: p, sizeId: sz.id, sizeLabel: sz.label, sizeW: sz.w, sizeH: sz.h,
-    process: state.process, stock: state.stock, qty: state.qty, breakdown: state.breakdown, positions, options: state.options });
+  return priceQuote({ ...quoteInput(), positions });
+}
+/** The quote's inputs apart from the printed positions — also used to price a part on its own. */
+function quoteInput() {
+  const p = P(), sz = S();
+  return { productId: state.productId, product: p, sizeId: sz.id, sizeLabel: sz.label, sizeW: sz.w, sizeH: sz.h, sizeD: sz.d,
+    process: state.process, stock: state.stock, qty: state.qty, breakdown: state.breakdown, positions: [], options: state.options };
 }
 
 function refreshQuote() {
@@ -1194,7 +1255,7 @@ $("#sendForm").addEventListener("submit", async (e) => {
     const used = new Set(designedIds().flatMap((id) => state.designs[id].filter((l) => l.kind === "image").map((l) => l.assetId)));
     const originals = [...assets.values()].filter((a) => used.has(a.id) && a.name !== "sample-logo.svg");
     go.textContent = "Making print files…";
-    const prints = await makePrintFiles({ ref: spec.ref, product: P(), assets, base: P().printedBase ? state.colour : null,
+    const prints = await makePrintFiles({ ref: spec.ref, product: P(), assets, base: P().printedBase && state.colour.toUpperCase() !== "#FFFFFF" && !/clear/i.test(state.stock || "") ? state.colour : null,   // white = unprinted (and clear, on acrylic)
       surfaces: designedIds().map((id) => ({ id, layers: state.designs[id], area: areaOf(surf(id)) })) });
     spec.print_files = prints.map((f) => ({ surface: f.id, file: f.name, size_mm: [Math.round(f.wMm), Math.round(f.hMm)], dpi: f.dpi, px: f.px }));
     const specOut = new Blob([JSON.stringify(spec, null, 2)], { type: "application/json" });

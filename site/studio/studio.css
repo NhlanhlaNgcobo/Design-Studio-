@@ -476,3 +476,20 @@ kbd { font-family: var(--f-mono); font-size: .7rem; border: 1px solid var(--line
 .place-tools .nudge button:hover { border-color: var(--ink); }
 .place-tip { color: var(--muted); font-size: .74rem; }
 .stage.moving { cursor: grabbing; }
+
+/* Product options: choices (order as, frame, walls) and text (your frame) */
+.opt-choice { border: 0; padding: 0; margin: 0 0 10px; display: grid; gap: 5px; }
+.opt-choice legend { font-size: .76rem; font-weight: 700; margin-bottom: 4px; padding: 0; }
+.opt-choice .choice { display: flex; gap: 8px; align-items: flex-start; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; background: #fff; }
+.opt-choice .choice:has(input:checked) { border-color: var(--magenta-ink); background: var(--magenta-tint); }
+.opt-choice .choice.off { opacity: .45; cursor: not-allowed; }
+.opt-choice .choice input { margin-top: 3px; accent-color: var(--magenta-ink); }
+.opt-choice .choice b { display: block; font-size: .8rem; }
+.opt-choice .choice small { display: block; font-size: .7rem; color: var(--muted); }
+.opt-text { display: flex; flex-direction: column; gap: 4px; margin: 0 0 10px; font-size: .76rem; font-weight: 700; }
+.opt-text input { border: 1px solid var(--line-2); border-radius: 8px; padding: 7px 9px; font: 500 .84rem inherit; }
+
+.opt-multi legend small { font-weight: 500; color: var(--muted); margin-left: 4px; }
+.opt-multi .choice span { flex: 1; min-width: 0; }
+.opt-multi .choice em { font: 600 .76rem var(--f-mono, monospace); font-style: normal; color: var(--ink); white-space: nowrap; margin-top: 2px; }
+.opt-multi .choice:not(:has(input:checked)) em { color: var(--muted); }

@@ -16,7 +16,7 @@
  * uploads, which travel with the order untouched.
  */
 
-import { PROCESSES, surfaceSize, effectiveDpi, dpiVerdict, paperFor } from "./products.js";
+import { PROCESSES, surfaceSize, effectiveDpi, dpiVerdict, paperFor, gazeboSummary } from "./products.js";
 import { layerSize, composeSurface, designBounds } from "./compose.js";
 import { snapshotMockup, viewsWithDesign } from "./render/index.js";
 import { rand, rand2 } from "./pricing.js";
@@ -33,7 +33,7 @@ export function jobRef() {
 export function buildSpec(m) {
   const { product, size, state, assets, quote, ref } = m;
   const surfaces = product.surfaces.filter((s) => state.designs[s.id]?.length).map((s) => {
-    const area = surfaceSize(product, size, s);
+    const area = surfaceSize(product, size, s, state.options);
     const b = designBounds(state.designs[s.id], assets, area);
     return {
       surface: s.id, label: s.label,
@@ -65,6 +65,7 @@ export function buildSpec(m) {
     product: m.productId, product_name: product.name,
     size: size.label, colour: m.colourName, colour_hex: state.colour, process: PROCESSES[state.process].label,
     stock: state.stock ?? null, options: state.options,
+    order_summary: product.render === "gazebo" ? gazeboSummary(state.options, Object.keys(state.designs).filter((k) => k.startsWith("wall-") && state.designs[k]?.length)) : null,
     quantity: quote.units, size_breakdown: product.sizeBreakdown ? state.breakdown : null,
     min_dpi: product.minDpi, surfaces,
     quote: quote.quoteOnly ? { range_incl_vat: quote.range.map(Math.round) }
@@ -122,7 +123,7 @@ export async function renderProof(m, dataTex) {
   g.fillText("PRINT AREAS — TRUE PROPORTION", fx, fy - 4);
   fy += 20;
   for (const s of product.surfaces.filter((x) => designed.has(x.id)).slice(0, 4)) {
-    const area = surfaceSize(product, size, s);
+    const area = surfaceSize(product, size, s, state.options);
     const k = Math.min(flatH / area.h, 300 / area.w);
     const fw = area.w * k, fh = area.h * k;
     g.fillStyle = state.colour; g.fillRect(fx, fy + 24, fw, fh);
@@ -145,6 +146,7 @@ export async function renderProof(m, dataTex) {
     ? Object.entries(state.breakdown).filter(([, n]) => +n > 0).map(([s, n]) => `${s}×${n}`).join("  ") || "—"
     : String(quote.units);
   const facts = [
+    ...(spec.order_summary ? [["Order", spec.order_summary]] : []),
     ["Size", size.label], ["Colour", m.colourName], ["Process", PROCESSES[state.process].label],
     ...(state.stock ? [["Stock", state.stock]] : []),
     ["Quantity", `${quote.units}${product.sizeBreakdown ? "  (" + qty + ")" : ""}`],

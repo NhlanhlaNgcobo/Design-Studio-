@@ -51,11 +51,52 @@ export const DEFAULT_PRICES = {
   fixed: {
     rollup: { "850x2000": 950, "1000x2000": 1150, "1200x2000": 1450 },
     flag: { S: 1350, M: 1650, L: 1950 },
-    gazebo: { "3x3": 4800, "4.5x3": 6900, "6x3": 8900 },
     mug: { "330": 95 },
   },
-  gazeboWall: { "3x3": 1600, "4.5x3": 2200, "6x3": 2800 },
-  gazeboSideWall: 1600,                       // a 3 m side wall, any gazebo width
+  /* Bottled water, own label (per bottle): filled = water + label, sealed and
+   * packed; labels = the printed label only. Clear vinyl costs more. */
+  water: {
+    filled: { "330": 7.5, "500": 8.5, "750": 11, "1000": 13, "1500": 16, "5000": 38 },
+    labels: { "330": 2.2, "500": 2.6, "750": 3, "1000": 3.4, "1500": 4, "5000": 8.5 },
+    clearVinyl: 0.2,
+    minQty: { filled: 24, labels: 50 },
+  },
+  /* Reusable bottles: the bottle, then the branding — a logo (up to A6 of
+   * artwork) or a bigger print / wrap. */
+  bottle: {
+    blank: { "500": 85, "750": 165, "1000": 210, "2200": 120 },
+    brand: { uv: { logo: 35, wrap: 65 }, engrave: { logo: 30, wrap: 60 }, sublimation: { logo: 30, wrap: 45 } },
+  },
+  /* Welcome boards: the board by its area and material (with a minimum), the
+   * display on top. */
+  welcomeBoard: {
+    perM2: { "5 mm foam board": 650, "5 mm PVC board": 850, "3 mm acrylic, clear": 2200, "5 mm acrylic, frosted": 2600, "3 mm ACM (aluminium)": 1300, "3 mm correx": 450 },
+    minEach: 180,
+    stand: { easel: 380, metal: 520, feet: 120, heavy: 950, none: 0 },
+  },
+  /* Gazebos, by part (SA market, Nov 2026: complete R2 300–R8 900, canopy print
+   * R1 350–R3 700, frames from R4 000, walls R250–R1 800 each). Walls are priced
+   * by their own length — a 6 × 3 m gazebo's back wall is 6 m, its sides 3 m. */
+  gazebo: {
+    // By frame grade: standard steel 32 mm, heavy-duty steel 45 mm hex,
+    // aluminium 40 mm hex, heavy-duty aluminium 50 mm hex.
+    complete: {
+      steel: { "2x2": 2900, "3x3": 3600 },
+      steelhex: { "2x2": 3900, "3x3": 4900, "4.5x3": 6900 },
+      alu40: { "2x2": 3600, "3x3": 4500, "4.5x3": 6400, "6x3": 8200 },
+      aluminium: { "2x2": 4300, "3x3": 5600, "4.5x3": 7600, "6x3": 9800 },
+    },
+    canopy: { "2x2": 1450, "3x3": 1950, "4.5x3": 2900, "6x3": 3600 },
+    frame: {
+      steel: { "2x2": 1900, "3x3": 2400 },
+      steelhex: { "2x2": 2800, "3x3": 3600, "4.5x3": 5100 },
+      alu40: { "2x2": 2500, "3x3": 3200, "4.5x3": 4700, "6x3": 6100 },
+      aluminium: { "2x2": 3100, "3x3": 4100, "4.5x3": 5700, "6x3": 7400 },
+    },
+    wall: { full: { "2": 650, "3": 900, "4.5": 1300, "6": 1700 }, half: { "2": 380, "3": 520 } },
+    wallDoubleSided: 0.6,                     // extra on each wall printed both sides
+    accessories: { weights: 450, bag: 350, toolkit: 95 },
+  },
   /* Installed work is quoted after seeing the vehicle or the building, so these
    * produce a RANGE, never a cart price. Per m² of artwork actually covered. */
   installed: {
@@ -90,6 +131,52 @@ export async function loadPrices(url = "/api/pricing") {
     if (r.ok) { const d = await r.json(); if (d.prices) setPrices(d.prices, { updated: d.updated }); }
   } catch { /* offline or no API: starter prices */ }
   return PR;
+}
+
+/**
+ * The priced lines of a gazebo order. Frame + canopy is the complete gazebo
+ * (bundle price, carry bag included); otherwise each part on its own. Walls are
+ * priced by their own length. Exported so the Studio can show each part's
+ * price beside its tick-box.
+ */
+export function gazeboLines(q, blockers = [], notes = []) {
+  const G = PR.gazebo, o = q.options || {}, fr = G.complete[o.frameType] ? o.frameType : "alu40";
+  const frName = { steel: "standard steel 32 mm", steelhex: "heavy-duty steel 45 mm hex", alu40: "aluminium 40 mm hex", aluminium: "heavy-duty aluminium 50 mm hex" }[fr];
+  const designed = (q.positions || []).filter((x) => x.surfaceId.startsWith("wall-")).map((x) => x.surfaceId);
+  const parts = [...new Set([...(o.parts || []), ...designed])], has = (x) => parts.includes(x);
+  const lines = [];
+  const price = (v, what) => { if (v == null) blockers.push(`${what} isn't made in ${q.sizeLabel}.`); return v ?? 0; };
+  if (has("frame") && has("canopy")) lines.push({ part: "complete", label: `Gazebo ${q.sizeLabel} complete: ${frName} frame, printed canopy & valance, carry bag`, unit: price(G.complete[fr]?.[q.sizeId], `A ${frName} gazebo`) });
+  else if (has("frame")) lines.push({ part: "frame", label: `Gazebo frame ${q.sizeLabel}, ${frName} (no print)`, unit: price(G.frame[fr]?.[q.sizeId], `A ${frName} frame`) });
+  else if (has("canopy")) lines.push({ part: "canopy", label: `Printed canopy & valance, ${q.sizeLabel} (print only)`, unit: price(G.canopy[q.sizeId], "A canopy print") });
+  const height = o.wallHeight === "half" ? "half" : "full", both = o.wallSides === "double";
+  for (const w of ["wall-back", "wall-left", "wall-right"].filter(has)) {
+    const lenMm = w === "wall-back" ? q.sizeW : q.sizeD;
+    const base = price(G.wall[height]?.[String(lenMm / 1000)], `A ${height}-height wall`);
+    lines.push({ part: w, label: `${{ "wall-back": "Back", "wall-left": "Left", "wall-right": "Right" }[w]} wall, ${height} height, ${lenMm / 1000} m, printed ${both ? "both sides" : "one side"}${designed.includes(w) ? "" : " (plain colour)"}`, unit: base * (both ? 1 + G.wallDoubleSided : 1) });
+  }
+  for (const k of ["weights", "bag", "toolkit"]) if (has(k)) lines.push({ part: k, label: { weights: "Leg weights, set of 4", bag: "Wheeled carry bag", toolkit: "Tool kit: pegs, ropes, mallet" }[k], unit: G.accessories[k] });
+  if (!parts.length) blockers.push("Tick what you'd like to order — frame, canopy, walls or accessories.");
+  if (!has("frame") && (has("canopy") || parts.some((x) => x.startsWith("wall-"))) && !String(o.yourFrame || "").trim())
+    blockers.push("Tell us your frame's make and size, so the print is made to fit it.");
+  if (has("frame") && !has("canopy") && !parts.some((x) => x.startsWith("wall-"))) notes.push("Frame only — nothing is printed.");
+  return lines;
+}
+
+/**
+ * The price beside a part's tick-box. Unticked: what ticking it would add.
+ * Ticked: its share of the total, so the ticked prices add up to the order —
+ * with frame and canopy both ticked, the frame shows its own price and the
+ * canopy the rest of the complete-gazebo bundle.
+ */
+export function gazeboPartPrice(q, part) {
+  const o = q.options || {}, cur = new Set(o.parts || []);
+  const sum = (parts) => gazeboLines({ ...q, positions: [], options: { ...o, parts: [...parts] } }).reduce((a, l) => a + l.unit, 0);
+  if (cur.has(part) && part === "frame" && cur.has("canopy")) return sum(["frame"]);
+  if (cur.has(part) && part === "canopy" && cur.has("frame")) return sum(["frame", "canopy"]) - sum(["frame"]);
+  const without = new Set(cur); without.delete(part);
+  const withIt = new Set(cur); withIt.add(part);
+  return sum(withIt) - sum(without);
 }
 
 const volume = (q) => [...PR.volume].sort((a, b) => b[0] - a[0]).find(([min]) => q >= min)?.[1] ?? 1;
@@ -173,14 +260,46 @@ export function quote(q) {
   }
 
   /* ── fixed-price goods ── */
-  else if (PR.fixed[q.productId]) {
+  else if (PR.fixed[q.productId] && q.productId !== "gazebo") {   // gazebos are priced by part, below — even if old saved prices still list one
     const each = PR.fixed[q.productId][q.sizeId] ?? Object.values(PR.fixed[q.productId])[0];
     const v = q.productId === "mug" ? volume(units) : 1;
     add(`${p.name}, ${q.sizeLabel}`, units, each * v);
-    if (q.productId === "gazebo" && q.positions.some((x) => x.surfaceId === "wall-back"))
-      add("Printed back wall", units, PR.gazeboWall[q.sizeId]);
-    const sideWalls = q.productId === "gazebo" ? q.positions.filter((x) => x.surfaceId === "wall-left" || x.surfaceId === "wall-right").length : 0;
-    if (sideWalls) add(`Printed side wall${sideWalls > 1 ? "s" : ""}`, units * sideWalls, PR.gazeboSideWall);
+  }
+
+  /* ── welcome boards ── */
+  else if (q.productId === "welcomeboard") {
+    const W = PR.welcomeBoard, o = q.options || {};
+    const m2 = (q.sizeW * q.sizeH) / 1e6, rate = W.perM2[q.stock] ?? Object.values(W.perM2)[0];
+    add(`Welcome board ${q.sizeLabel}, ${o.orientation === "landscape" ? "landscape" : "portrait"}, ${q.stock}`, units, Math.max(W.minEach, rate * m2));
+    const st = o.stand || "easel";
+    if (W.stand[st]) add({ easel: "Wooden easel", metal: "Black metal easel", feet: "Table-top feet", heavy: "Heavy-duty display easel" }[st] ?? "Display", units, W.stand[st]);
+  }
+
+  /* ── bottled water, own label ── */
+  else if (q.productId === "water") {
+    const W = PR.water, supply = q.options?.supply === "labels" ? "labels" : "filled", v = volume(units);
+    let each = (W[supply][q.sizeId] ?? Object.values(W[supply])[0]) * v;
+    if (/clear/i.test(q.stock || "")) each += (W.labels[q.sizeId] ?? 0) * W.clearVinyl * v;
+    add(supply === "filled" ? `Bottled water ${q.sizeLabel}, with your label (${q.stock})` : `Bottle labels for ${q.sizeLabel}, ${q.stock}`, units, each);
+    if (units && units < W.minQty[supply])
+      blockers.push(supply === "filled" ? `Bottled water starts at ${W.minQty.filled} bottles (a case).` : `Labels start at ${W.minQty.labels}.`);
+  }
+
+  /* ── reusable bottles: bottle + branding ── */
+  else if (q.productId === "bottle") {
+    const B = PR.bottle, v = volume(units);
+    add(`${p.name}: ${q.sizeLabel}`, units, (B.blank[q.sizeId] ?? Object.values(B.blank)[0]) * v);
+    const how = B.brand[q.process] ?? B.brand.uv;
+    for (const pos of q.positions) {
+      const big = pos.areaMm2 > 105 * 148;
+      add(`${{ uv: "UV print", engrave: "Laser engraving", sublimation: "Sublimation" }[q.process] ?? "Branding"}, ${big ? "large print / wrap" : "logo"}`, units, (big ? how.wrap : how.logo) * v);
+    }
+    if (!q.positions.length) notes.push("No branding added yet: that is the price of plain bottles.");
+  }
+
+  /* ── gazebos, by part: whatever is ticked, added up ── */
+  else if (q.productId === "gazebo") {
+    for (const l of gazeboLines(q, blockers, notes)) add(l.label, units * (l.each ?? 1), l.unit);
   }
 
   /* ── paper ── */

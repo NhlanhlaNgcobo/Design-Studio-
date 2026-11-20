@@ -40,6 +40,7 @@ const section = (title, help, body) => `<section><h2>${esc(title)}</h2>${help ? 
 const rows = (html) => `<div class="rows">${html}</div>`;
 const tierTable = (path, qtyLabel, priceLabel) => `<table><tr><th>${qtyLabel}</th><th>${priceLabel}</th></tr>${Object.keys(get(path)).map((k) =>
   `<tr><td class="mono">${esc(k)}</td><td>${input([...path, k])}</td></tr>`).join("")}</table>`;
+const FRAMES = [["steel", "Steel 32 mm"], ["steelhex", "Steel 45 hex"], ["alu40", "Alu 40 hex"], ["aluminium", "Alu 50 hex HD"]];
 const name = (id) => PRODUCTS[id]?.name ?? id;
 const sizeName = (pid, key) => PRODUCTS[pid]?.sizes.find((s) => s.id === key)?.label ?? key;
 
@@ -74,8 +75,28 @@ function render() {
       rows(Object.keys(P.perM2).map((k) => field(["perM2", k], `${name(k)} per m²`) + field(["minEach", k], `${name(k)} minimum each`)).join(""))),
     section("Fixed-price items", "",
       Object.keys(P.fixed).map((pid) => `<h3 style="font-size:.86rem;margin:12px 0 6px">${esc(name(pid))}</h3>` +
-        rows(Object.keys(P.fixed[pid]).map((k) => field(["fixed", pid, k], sizeName(pid, k))).join(""))).join("") +
-      `<h3 style="font-size:.86rem;margin:12px 0 6px">Gazebo printed walls</h3>` + rows(Object.keys(P.gazeboWall).map((k) => field(["gazeboWall", k], `Back wall, ${sizeName("gazebo", k)}`)).join("") + field(["gazeboSideWall"], "Side wall (3 m), each"))),
+        rows(Object.keys(P.fixed[pid]).map((k) => field(["fixed", pid, k], sizeName(pid, k))).join(""))).join("")),
+    section("Welcome boards", "Priced by the board's area and material, with a minimum per board; the display is added on top.",
+      rows(Object.keys(P.welcomeBoard.perM2).map((k) => field(["welcomeBoard", "perM2", k], `${k}, per m²`)).join("") + field(["welcomeBoard", "minEach"], "Minimum per board") +
+        field(["welcomeBoard", "stand", "easel"], "Wooden easel") + field(["welcomeBoard", "stand", "metal"], "Black metal easel") + field(["welcomeBoard", "stand", "feet"], "Table-top feet") + field(["welcomeBoard", "stand", "heavy"], "Heavy-duty display easel"))),
+    section("Bottled water, own label — per bottle", "Water with the label: still water, sealed and labelled, packed in cases. Labels only: printed and cut for the customer's own bottles.",
+      `<table><tr><th>Size</th><th>Water with label</th><th>Labels only</th></tr>${Object.keys(P.water.filled).map((k) =>
+        `<tr><td>${esc(sizeName("water", k))}</td><td>${input(["water", "filled", k])}</td><td>${input(["water", "labels", k])}</td></tr>`).join("")}</table>` +
+      rows(field(["water", "clearVinyl"], "Clear vinyl label, extra", "pct") + field(["water", "minQty", "filled"], "Minimum, water with label", "count") + field(["water", "minQty", "labels"], "Minimum, labels only", "count"))),
+    section("Water bottles — reusable", "The plain bottle, then the branding on each: a logo (artwork up to A6) or a large print or wrap. Bulk discount applies.",
+      rows(Object.keys(P.bottle.blank).map((k) => field(["bottle", "blank", k], sizeName("bottle", k))).join("")) +
+      `<table><tr><th>Branding</th><th>Logo</th><th>Large print / wrap</th></tr>${[["uv", "UV print"], ["engrave", "Laser engraving"], ["sublimation", "Sublimation (white bottles)"]].map(([k, n]) =>
+        `<tr><td>${n}</td><td>${input(["bottle", "brand", k, "logo"])}</td><td>${input(["bottle", "brand", k, "wrap"])}</td></tr>`).join("")}</table>`),
+    section("Gazebos — by part", "Customers order a complete gazebo, a canopy print for their own frame, a frame on its own, or printed walls. Steel frames and half walls are 2 × 2 and 3 × 3 m only.",
+      ["complete", "frame"].map((kind) => `<h3 style="font-size:.86rem;margin:14px 0 6px">${kind === "complete" ? "Complete gazebo (frame, printed canopy & valance, bag)" : "Frame only (no print)"}</h3>
+        <table><tr><th>Size</th>${FRAMES.map(([, l]) => `<th>${l}</th>`).join("")}</tr>${Object.keys(P.gazebo.canopy).map((k) =>
+        `<tr><td><b>${esc(sizeName("gazebo", k))}</b></td>${FRAMES.map(([f]) => `<td>${k in (P.gazebo[kind][f] || {}) ? input(["gazebo", kind, f, k]) : "—"}</td>`).join("")}</tr>`).join("")}</table>`).join("") +
+      `<h3 style="font-size:.86rem;margin:14px 0 6px">Printed canopy & valance only</h3>` + rows(Object.keys(P.gazebo.canopy).map((k) => field(["gazebo", "canopy", k], sizeName("gazebo", k))).join("")) +
+      `<h3 style="font-size:.86rem;margin:14px 0 6px">Printed walls, each — by the wall's length</h3>` +
+      `<table><tr><th>Wall length</th><th>Full height</th><th>Half height</th></tr>${Object.keys(P.gazebo.wall.full).map((k) =>
+        `<tr><td><b>${esc(k)} m</b></td><td>${input(["gazebo", "wall", "full", k])}</td><td>${k in P.gazebo.wall.half ? input(["gazebo", "wall", "half", k]) : "—"}</td></tr>`).join("")}</table>` +
+      rows(field(["gazebo", "wallDoubleSided"], "Wall printed both sides, extra", "pct") +
+        field(["gazebo", "accessories", "weights"], "Leg weights, set of 4") + field(["gazebo", "accessories", "bag"], "Wheeled carry bag") + field(["gazebo", "accessories", "toolkit"], "Tool kit"))),
     section("Installed work — price range per m²", "Vehicles and shopfronts are never sold at a fixed price; the Studio shows this range and you quote after seeing it.",
       `<table><tr><th></th><th>From</th><th>To</th></tr>${Object.entries(P.installed).flatMap(([k, v]) => Object.keys(v).map((f) =>
         `<tr><td>${esc(PROCESSES[k]?.label ?? k)}${f === "litExtraPerM2" ? " — illuminated, extra" : ""}</td><td>${input(["installed", k, f, 0])}</td><td>${input(["installed", k, f, 1])}</td></tr>`)).join("")}</table>`),

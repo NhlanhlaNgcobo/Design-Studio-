@@ -16,11 +16,13 @@ import { surfaceSize } from "../products.js";
 import { garmentSvg, capSvg, toteSvg } from "./garment.js";
 import { paperSvg, bannerSvg, flagSvg, shopfrontSvg } from "./flat.js";
 import { vehicleSvg } from "./vehicle.js";
+import { easelSvg } from "./easel.js";
 import { drawGazebo } from "./gazebo.js";
 import { drawMug } from "./mug.js";
+import { drawBottle } from "./bottle.js";
 import { blankFor, drawPhoto } from "./photo.js";
 
-const CANVAS_KINDS = new Set(["gazebo", "mug"]);
+const CANVAS_KINDS = new Set(["gazebo", "mug", "bottle"]);
 const GARMENT_KINDS = new Set(["garment", "cap", "tote"]);
 
 /** Which side of the product to show: the side of the surface being edited. */
@@ -40,7 +42,7 @@ function placements(ctx, view, outline) {
   return product.surfaces
     .filter((s) => s.view === view)
     .map((s) => {
-      const a = surfaceSize(product, size, s);
+      const a = surfaceSize(product, size, s, ctx.options);
       const o = ctx.offsets?.[s.id] || {};
       return { surfaceId: s.id, wMm: a.w, hMm: a.h, dx: o.dx || 0, dy: o.dy || 0, tex: ctx.tex[s.id], texCanvas: ctx.texCanvas[s.id], outline: outline && s.id === ctx.active };
     })
@@ -56,6 +58,7 @@ function svgFor(ctx, view, outline) {
     case "tote": return toteSvg({ colour, areas: placements(ctx, view, outline) });
     case "paper": return paperSvg({ product, size, tex: ctx.tex, active: outline ? (ctx.active ?? "front") : (view === "back" ? "back" : "front"), options: ctx.options, stock: ctx.stock });
     case "banner": return bannerSvg({ product, size, tex: ctx.tex, active: !!active, colour, yaw: ctx.yaw });
+    case "easel": return easelSvg({ area: surfaceSize(product, size, product.surfaces[0], ctx.options), tex: ctx.tex.face, colour, options: ctx.options, stock: ctx.stock, active: !!active });
     case "flag": return flagSvg({ size, tex: ctx.tex.face, active: !!active, colour, yaw: ctx.yaw });
     case "shopfront": return shopfrontSvg({ size, tex: ctx.tex, colour, active: !!active, options: ctx.options });
     case "vehicle": {
@@ -81,6 +84,7 @@ export async function renderMockup(stage, ctx) {
     if (!c) { stage.innerHTML = `<canvas class="mock" aria-label="Product preview"></canvas>`; c = stage.firstChild; lastSvgs.delete(stage); }
     if (product.render === "gazebo") drawGazebo(c, { ...ctx, frame: ctx.parts?.frame, editing: ctx.active, active: guides ? ctx.active : null });
     else if (product.render === "mug") drawMug(c, { ...ctx, inside: ctx.parts?.inside, handle: ctx.parts?.handle, active: guides ? ctx.active : null });
+    else if (product.render === "bottle") drawBottle(c, { ...ctx, cap: ctx.parts?.cap, active: guides ? ctx.active : null });
     else {
       const entry = blankFor(ctx.productId, view);
       await drawPhoto(c, entry, { colour: ctx.colour, sizeChestMm: ctx.size.w, placements: placements(ctx, view, guides) });
@@ -106,6 +110,7 @@ export async function snapshotMockup(ctx, view, w, h) {
   const c = document.createElement("canvas");
   if (product.render === "gazebo") { c.width = w; c.height = h; drawGazebo(c, { ...ctx, frame: ctx.parts?.frame, editing: null, active: null }, { w, h }); return c; }
   if (product.render === "mug") { c.width = w; c.height = h; drawMug(c, { ...ctx, inside: ctx.parts?.inside, handle: ctx.parts?.handle, active: null }, { w, h }); return c; }
+  if (product.render === "bottle") { c.width = w; c.height = h; drawBottle(c, { ...ctx, cap: ctx.parts?.cap, active: null }, { w, h }); return c; }
   const blank = GARMENT_KINDS.has(product.render) && blankFor(ctx.productId, view);
   if (blank) {
     const p = document.createElement("canvas");

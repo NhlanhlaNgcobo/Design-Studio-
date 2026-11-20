@@ -164,10 +164,23 @@ await page.waitForTimeout(800);
 await page.locator('#zoomIn').click();
 await page.locator('#spin').click();
 await page.waitForTimeout(3400);
-assert.match(await page.locator('#quote').innerText(), /side wall/i);
+assert.match(await page.locator('#quote').innerText(), /Left wall, full height/);
 const dlG = page.waitForEvent('download');
 await page.locator('#downloadMockup').click();
 assert.match((await dlG).suggestedFilename(), /mockup.png$/);
+// Gazebo sold in parts: tick any mix and the price adds up.
+const tick = (v, on = true) => page.locator(`#optionsField input[data-o=parts][value="${v}"]`).setChecked(on);
+await tick('weights');
+await page.waitForFunction(() => document.querySelector('#quote').innerText.includes('Leg weights, set of 4'));
+await tick('frame', false);                                     // canopy (and walls) for the customer's own frame
+await page.waitForFunction(() => document.querySelector('.q-block')?.textContent.includes("frame's make and size"));
+await page.locator('#optionsField input[data-o=yourFrame]').fill('Ovation aluminium 3 × 3 m');
+await page.waitForFunction(() => !document.querySelector('.q-block') && document.querySelector('#quote').innerText.includes('Printed canopy & valance'));
+await tick('canopy', false); await tick('frame');                  // frame and the designed wall, no canopy
+await page.waitForFunction(() => /Gazebo frame .* \(no print\)/.test(document.querySelector('#quote').innerText) && document.querySelector('#quote').innerText.includes('Left wall'));
+await page.locator('[data-s="6x3"]').click();
+assert.ok(await page.locator('#optionsField [value=steel]').isDisabled(), 'steel frames stop at 3 × 3 m');
+await tick('canopy');
 // Mug: outside, inside and handle are three separate colours.
 await page.goto('http://127.0.0.1:8125/studio/?product=mug', {waitUntil:'domcontentloaded'});
 await page.waitForSelector('#stage svg, #stage canvas');   // the Studio has booted (shop settings loaded)
@@ -182,6 +195,41 @@ for (const id of ['#addShape', '#addBackground', '#addQr']) {
   const bb = await page.locator(id).boundingBox(), panel = await page.locator('.toolbar').boundingBox();
   assert.ok(bb && bb.x + bb.width <= panel.x + panel.width + 1, `${id} fits`);
 }
+// Welcome boards: a template on the board's one surface, landscape swaps the area, board + easel priced.
+await page.goto('http://127.0.0.1:8125/studio/?product=welcomeboard', {waitUntil:'domcontentloaded'});
+await page.waitForSelector('#templates img');
+await page.locator('[data-tpl=wedding]').click();
+await page.waitForFunction(() => [...document.querySelectorAll('.layer-item b')].some((x) => x.textContent === 'Welcome'));
+assert.match(await page.locator('#areaInfo').textContent(), /594 mm × 841 mm/);
+await page.locator('#optionsField [value=landscape]').check();
+await page.waitForFunction(() => document.querySelector('#areaInfo').textContent.includes('841 mm × 594 mm'));
+await page.waitForFunction(() => /Welcome board A1.*landscape/.test(document.querySelector('#quote').innerText) && document.querySelector('#quote').innerText.includes('Wooden easel'));
+// Big boards: the 1.6 m easels stop at 900 × 1200, so a full sheet switches to the heavy-duty easel.
+await page.locator('[data-s="1200x2400"]').click();
+await page.waitForFunction(() => document.querySelector('#quote').innerText.includes('Heavy-duty display easel') && !document.querySelector('#quote').innerText.includes('Wooden easel'));
+assert.ok(await page.locator('#optionsField [value=easel]').isDisabled());
+// Bottled water: sold by the case, labels-only has its own minimum; the 5 L carries a bigger label.
+await page.goto('http://127.0.0.1:8125/studio/?product=water', {waitUntil:'domcontentloaded'});
+await page.waitForSelector('#stage canvas');
+await page.locator('#sample').click();
+await page.waitForFunction(() => /Bottled water 500 ml, with your label.*× 24/.test(document.querySelector('#quote').innerText));
+await page.locator('[data-s="5000"]').click();
+await page.waitForFunction(() => document.querySelector('#areaInfo').textContent.includes('526 mm × 140 mm'));
+await page.locator('#optionsField [value=labels]').check();
+await page.waitForFunction(() => document.querySelector('#quote').innerText.includes('Labels start at 50'));
+// Reusable bottles: branding priced on top of the bottle; sublimation only on white.
+await page.goto('http://127.0.0.1:8125/studio/?product=bottle', {waitUntil:'domcontentloaded'});
+await page.waitForSelector('#stage canvas');
+await page.locator('#sample').click();
+await page.waitForFunction(() => /750 ml stainless flask[\s\S]*UV print/.test(document.querySelector('#quote').innerText));
+await page.$eval('[data-pr=sublimation]', (b) => b.click());
+await page.waitForFunction(() => document.querySelector('#checks').innerText.includes('white only'));
+// Gazebo frame grades: the picker is always there; without the frame it asks for the customer's frame type.
+await page.goto('http://127.0.0.1:8125/studio/?product=gazebo', {waitUntil:'domcontentloaded'});
+await page.waitForSelector('#stage svg, #stage canvas');
+assert.equal(await page.locator('#optionsField [data-o=frameType]').count(), 4);
+await page.locator('#optionsField input[data-o=parts][value=frame]').uncheck();
+await page.waitForFunction(() => [...document.querySelectorAll('#optionsField legend')].some((l) => l.textContent.startsWith('Your frame type')));
 // Flags and banners turn by dragging and take a printed background colour.
 await page.goto('http://127.0.0.1:8125/studio/?product=flag', {waitUntil:'domcontentloaded'});
 await page.waitForSelector('#stage svg, #stage canvas');   // the Studio has booted (shop settings loaded)
@@ -202,7 +250,7 @@ await page.waitForFunction(() => [...document.querySelectorAll('.layer-item')].l
 await page.locator('[data-sf=back]').click();
 await page.waitForFunction(() => [...document.querySelectorAll('.layer-item b')].some((b) => b.textContent === 'Sipho Dlamini'));
 assert.ok(await page.locator('.layer-item b', { hasText: /^QR · https:\/\/www\./ }).count(), 'QR code from the website detail');
-assert.match(await page.locator('#checks').innerText(), /example details/);
+await page.waitForFunction(() => /example details/.test(document.querySelector('#checks').innerText));
 await page.locator('#addShape').click();
 await page.locator('#inspector [data-shape=ellipse]').click();
 assert.equal(await page.locator('.layer-item b', { hasText: 'Circle' }).count(), 1);
@@ -233,7 +281,7 @@ await page.waitForFunction(() => document.querySelector('#brandName')?.textConte
 assert.equal(await page.locator('#sendTop .long').textContent(), 'Send to Northside');
 assert.match(await page.locator('#barWa').getAttribute('href'), /wa\.me\/27820000000/);
 assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--magenta-ink').trim()), '#0F766E');
-assert.equal(await page.evaluate(async () => Object.keys((await import('/studio/js/products.js')).PRODUCTS).length), 18, 'demo has every product');
+assert.equal(await page.evaluate(async () => Object.keys((await import('/studio/js/products.js')).PRODUCTS).length), 21, 'demo has every product');
 assert.equal(await page.evaluate(() => document.body.innerText.includes('Eminence')), false, 'no trace of the other shop');
 const demoPut = await page.request.put('http://127.0.0.1:8125/api/pricing?tenant=demo', { headers: { Authorization: 'Bearer admin' }, data: { prices: {} } });
 assert.equal(demoPut.status(), 401, "Eminence's password can't change another shop's prices");

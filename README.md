@@ -207,6 +207,26 @@ default); `demo` (Northside Print Co.) shows a second. Pick a shop with
   colour, a separate **frame colour** (silver, black, white), the pop-up frame's
   scissor truss and foot plates, **back and side walls** (each priced), and a
   setting to stand it in — **studio, grass or paving** — drawn in the same 3D.
+- **Gazebo sold in parts — tick any mix**, as SA suppliers sell them: frame,
+  printed canopy & valance, back / left / right wall, leg weights, carry bag,
+  tool kit. Each tick-box shows its price and the total adds up as you tick;
+  frame + canopy together is the complete-gazebo bundle (bag included). A
+  canopy or walls without the frame asks for the customer's frame make and
+  size. Four frame grades — standard steel 32 mm (2 × 2 and 3 × 3 m), heavy-duty steel 45 mm hex (up to 4.5 × 3 m), aluminium 40 mm hex, heavy-duty aluminium 50 mm hex — and without the frame ticked, the same picker asks which frame the customer has, so the print fits;
+  walls full or half height (half 2 × 2 and 3 × 3 m only), printed one or both
+  sides, priced by the wall's own length; a ticked wall with no design is
+  printed plain in the canopy colour. Sizes 2 × 2, 3 × 3, 4.5 × 3 and 6 × 3 m.
+  Every part has its own price at `/studio/admin/`; the proof, WhatsApp message
+  and email list exactly what is ordered.
+- **Welcome boards** — wedding, event and reception signs: A2, A1, A0, 600 × 900,
+  900 × 1200, 600 mm square, and big boards of 1000 × 1500, 1200 × 1800 and
+  1200 × 2400 (a full sheet), portrait or landscape; foam board, PVC, clear or
+  frosted acrylic, ACM or correx; on a wooden or black metal easel (up to
+  900 × 1200), table-top feet (A1 and smaller), a heavy-duty display easel for
+  the big boards, or board only. Picking a size a display can't hold switches
+  it to one that can. Three templates (wedding, event, business) filled from
+  *Your details* (heading, names, line, date, venue). Shown to scale on its
+  easel at a venue; priced by area and material, with the display on top.
 - **Teardrop flag, pull-up, correx board** — drag to turn them on their stand;
   past 90° you see the back (a flag's print shows through mirrored; a pull-up
   shows its grey back and pole). The PVC banner is tied to a fence, so it stays.
@@ -214,6 +234,15 @@ default); `demo` (Northside Print Co.) shows a second. Pick a shop with
   colour is printed edge to edge behind the design, shown in the editor, and
   written into the print-ready PNG.
 - **Mug** — drag to turn, now with zoom.
+- **Bottled water, own label** — 330 ml, 500 ml, 750 ml, 1 L, 1.5 L and 5 L
+  (with carry handle). The label wraps all the way round (8 mm overlap) on
+  gloss, matt or clear vinyl, with a cap colour. Order water with the label
+  (minimum a case of 24) or labels only (minimum 50). Drag to turn the bottle.
+- **Water bottles (reusable)** — 500 ml aluminium sports bottle, 750 ml and
+  1 L stainless flasks, 2.2 L gym jug; bottle and lid colours. Branded by UV
+  print, laser engraving (previewed in one tone) or sublimation (white bottles
+  only — the Studio says so and offers UV). Priced as bottle + logo or large
+  print/wrap, with the bulk discount. Drag to turn.
 
 ## Background removal — free, on the customer's device
 

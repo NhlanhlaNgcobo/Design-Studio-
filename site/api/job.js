@@ -137,6 +137,7 @@ async function complete(d, req, res, store, secret) {
       ${row("Delivery", escHtml(clean(c.delivery, 300)))}
       ${row("Needed by", escHtml(clean(c.needBy, 20)))}
       ${row("Notes", escHtml(clean(c.notes, 2000)))}
+      ${row("Order", escHtml(clean(spec.order_summary, 400)))}
       ${row("Sizes", spec.size_breakdown ? escHtml(Object.entries(spec.size_breakdown).filter(([, n]) => +n > 0).map(([s, n]) => `${s}×${n}`).join(", ")) : escHtml(spec.size))}
       ${row("Price", escHtml(price))}
     </table>

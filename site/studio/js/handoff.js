@@ -25,6 +25,7 @@ export function orderMessage({ spec, quoteText, customer, proofUrl, attached }) 
     ``,
     `Ref: ${spec.ref}`,
     `${spec.quantity} × ${spec.product_name}, ${spec.colour}, ${spec.process}`,
+    spec.order_summary || "",
     spec.size_breakdown ? `Sizes: ${Object.entries(spec.size_breakdown).filter(([, n]) => +n > 0).map(([s, n]) => `${s}×${n}`).join(", ")}` : `Size: ${spec.size}`,
     ...spec.surfaces.map((s) => `• ${s.label}: ${s.design_bounds_mm ? `${Math.round(s.design_bounds_mm.width)} × ${Math.round(s.design_bounds_mm.height)} mm` : "design"}${s.position_offset_mm ? ` (placed ${[s.position_offset_mm.down ? `${Math.abs(s.position_offset_mm.down)} mm ${s.position_offset_mm.down > 0 ? "lower" : "higher"}` : "", s.position_offset_mm.right ? `${Math.abs(s.position_offset_mm.right)} mm ${s.position_offset_mm.right > 0 ? "right" : "left"}` : ""].filter(Boolean).join(", ")} than standard)` : ""}`),
     quoteText ? `Studio price: ${quoteText}` : "",
